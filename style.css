@@ -257,6 +257,16 @@
     margin-left: 4px;
 }
 
+.fmg-badge-off {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    background: rgba(255, 100, 100, 0.2);
+    color: #ff8888;
+    border-radius: 3px;
+    margin-left: 4px;
+}
+
 /* 输入框 */
 .fmg-textarea {
     width: 100%;

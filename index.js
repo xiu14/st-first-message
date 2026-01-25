@@ -471,14 +471,16 @@
             const selected = settings.selectedWorldEntries || [];
 
             container.innerHTML = entries.map((entry, index) => {
-                const isChecked = selected.length === 0 || selected.includes(index);
+                // 默认只勾选启用的条目
+                const isChecked = entry.enabled !== false;
                 const badge = entry.constant ? '<span class="fmg-badge">常驻</span>' : '';
+                const disabledBadge = entry.enabled === false ? '<span class="fmg-badge-off">禁用</span>' : '';
 
                 return `
                     <div class="fmg-wi-item">
                         <label>
                             <input type="checkbox" class="fmg-wi-cb" data-index="${index}" ${isChecked ? 'checked' : ''}>
-                            ${escapeHtml(entry.name)} ${badge}
+                            ${escapeHtml(entry.name)} ${badge}${disabledBadge}
                         </label>
                     </div>
                 `;
@@ -517,7 +519,8 @@
                         entries.push({
                             name: entry.comment || entry.name || entry.keys?.[0] || '未命名',
                             content: entry.content || '',
-                            constant: entry.constant || false
+                            constant: entry.constant || false,
+                            enabled: entry.enabled !== false && entry.disable !== true
                         });
                     }
                 }
@@ -543,7 +546,8 @@
                 entries.push({
                     name: entry.comment || entry.name || entry.key?.[0] || entry.keys?.[0] || '未命名',
                     content: entry.content || '',
-                    constant: entry.constant || false
+                    constant: entry.constant || false,
+                    enabled: entry.enabled !== false && entry.disable !== true
                 });
             }
         }
