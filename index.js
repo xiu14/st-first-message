@@ -405,59 +405,73 @@
         }
     }
 
-    async function loadWorldInfoList(context) {
+    async function loadWorldInfoList(context, forceRefresh = true) {
         const container = document.getElementById('fmg-wi-list');
         window._fmgWorldEntries = [];
         container.innerHTML = '<div style="color: #888;">加载中...</div>';
 
         try {
             let entries = [];
+            let worldName = null;
 
-            // 方式1: 从角色卡内嵌的character_book获取
-            entries = getCharacterBookEntries(context);
-            console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
-
-            // 方式2: 从外部关联的世界书获取
-            if (entries.length === 0 && context.characters && context.characterId !== undefined) {
+            // 获取角色关联的世界书名称
+            if (context.characters && context.characterId !== undefined) {
                 const char = context.characters[context.characterId];
-                const worldName = char?.data?.extensions?.world;
+                worldName = char?.data?.extensions?.world;
+            }
 
-                if (worldName) {
-                    console.log('[开场白生成器] 发现外部关联世界书:', worldName);
+            // 优先尝试从API获取外部世界书（强制刷新时跳过缓存）
+            if (worldName) {
+                console.log('[开场白生成器] 发现外部关联世界书:', worldName);
+                
+                try {
+                    // 获取SillyTavern请求头
+                    const headers = typeof context.getRequestHeaders === 'function'
+                        ? context.getRequestHeaders()
+                        : { 'Content-Type': 'application/json' };
 
-                    // 尝试从worldInfoCache获取
-                    if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
-                        const worldData = window.worldInfoCache.get(worldName);
-                        console.log('[开场白生成器] 从cache获取世界书数据');
+                    // 强制从API获取最新数据，跳过缓存
+                    console.log('[开场白生成器] 从API强制刷新世界书数据...');
+                    const response = await fetch('/api/worldinfo/get', {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ name: worldName })
+                    });
+                    
+                    if (response.ok) {
+                        const worldData = await response.json();
+                        console.log('[开场白生成器] 从API获取世界书数据成功');
                         entries = extractEntriesFromWorldData(worldData);
-                    }
-                    // 尝试通过fetch加载
-                    else {
-                        try {
-                            // 获取SillyTavern请求头
-                            const headers = typeof context.getRequestHeaders === 'function'
-                                ? context.getRequestHeaders()
-                                : { 'Content-Type': 'application/json' };
-
-                            const response = await fetch('/api/worldinfo/get', {
-                                method: 'POST',
-                                headers: headers,
-                                body: JSON.stringify({ name: worldName })
-                            });
-                            if (response.ok) {
-                                const worldData = await response.json();
-                                console.log('[开场白生成器] 从API获取世界书数据');
-                                entries = extractEntriesFromWorldData(worldData);
-                            } else {
-                                console.warn('[开场白生成器] API返回错误:', response.status);
-                            }
-                        } catch (e) {
-                            console.warn('[开场白生成器] 加载外部世界书失败:', e);
+                        
+                        // 更新缓存以保持一致性
+                        if (forceRefresh && typeof window.worldInfoCache !== 'undefined') {
+                            window.worldInfoCache.set(worldName, worldData);
+                            console.log('[开场白生成器] 已更新worldInfoCache');
+                        }
+                    } else {
+                        console.warn('[开场白生成器] API返回错误:', response.status);
+                        // 回退到缓存
+                        if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
+                            const worldData = window.worldInfoCache.get(worldName);
+                            console.log('[开场白生成器] 回退到cache获取世界书数据');
+                            entries = extractEntriesFromWorldData(worldData);
                         }
                     }
-                } else {
-                    console.log('[开场白生成器] 无外部关联世界书 (extensions.world为空)');
+                } catch (e) {
+                    console.warn('[开场白生成器] 加载外部世界书失败:', e);
+                    // 回退到缓存
+                    if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
+                        const worldData = window.worldInfoCache.get(worldName);
+                        console.log('[开场白生成器] 回退到cache获取世界书数据');
+                        entries = extractEntriesFromWorldData(worldData);
+                    }
                 }
+            }
+
+            // 如果外部世界书为空，尝试从角色卡内嵌的character_book获取
+            if (entries.length === 0) {
+                entries = getCharacterBookEntries(context);
+                console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
             }
 
             console.log('[开场白生成器] 最终获取到世界书条目数:', entries.length);
