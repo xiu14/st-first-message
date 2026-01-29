@@ -21,7 +21,10 @@
         includePersonality: true,
         includeScenario: true,
         includeCurrentFirstMes: true,
-        selectedWorldEntries: []
+        selectedWorldEntries: [],
+        // 预设条目相关
+        includePresetPrompts: false,
+        selectedPresetPrompts: []
     };
 
     let settings = { ...DEFAULT_SETTINGS };
@@ -165,16 +168,27 @@
                     </div>
                     
                     <!-- 世界书区 -->
-                    <div class="fmg-section">
+                    <div class="fmg-section fmg-section-compact">
                         <div class="fmg-section-header">
                             <h4>📚 世界书条目</h4>
                             <div class="fmg-btn-group">
-                                <button class="fmg-btn-small" id="fmg-wi-all">全选</button>
-                                <button class="fmg-btn-small" id="fmg-wi-none">清空</button>
+                                <span class="fmg-count" id="fmg-wi-count">0/0</span>
+                                <button class="fmg-btn-small fmg-btn-open" id="fmg-wi-open">选择条目</button>
                             </div>
                         </div>
-                        <div class="fmg-wi-list" id="fmg-wi-list">
-                            <div style="color: #888;">加载中...</div>
+                    </div>
+                    
+                    <!-- 预设条目区 -->
+                    <div class="fmg-section fmg-section-compact">
+                        <div class="fmg-section-header">
+                            <h4>📋 预设条目</h4>
+                            <div class="fmg-btn-group">
+                                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+                                    <input type="checkbox" id="fmg-inc-preset"> 包含
+                                </label>
+                                <span class="fmg-count" id="fmg-preset-count">0/0</span>
+                                <button class="fmg-btn-small fmg-btn-open" id="fmg-preset-open">选择条目</button>
+                            </div>
                         </div>
                     </div>
                     
@@ -298,10 +312,22 @@
             if (e.target.id === 'fmg-save-api') saveApiSettings();
         });
 
-        // 世界书全选/清空
+        // 世界书选择弹窗
         document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wi-all') selectAllWorldInfo(true);
-            if (e.target.id === 'fmg-wi-none') selectAllWorldInfo(false);
+            if (e.target.id === 'fmg-wi-open') openSelectionModal('worldinfo');
+        });
+
+        // 预设条目选择弹窗
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-preset-open') openSelectionModal('preset');
+        });
+
+        // 预设总开关变化
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'fmg-inc-preset') {
+                settings.includePresetPrompts = e.target.checked;
+                saveSettings();
+            }
         });
 
         // ESC关闭
@@ -399,6 +425,9 @@
             // 加载世界书条目
             loadWorldInfoList(context);
 
+            // 加载预设条目
+            loadPresetPrompts(context);
+
         } catch (e) {
             console.error('[开场白生成器] 加载数据失败:', e);
             showStatus('fmg-status', 'error', '加载数据失败: ' + e.message);
@@ -406,103 +435,84 @@
     }
 
     async function loadWorldInfoList(context, forceRefresh = true) {
-        const container = document.getElementById('fmg-wi-list');
         window._fmgWorldEntries = [];
-        container.innerHTML = '<div style="color: #888;">加载中...</div>';
 
         try {
             let entries = [];
-            let worldName = null;
 
-            // 获取角色关联的世界书名称
+            // 获取外部关联的世界书
             if (context.characters && context.characterId !== undefined) {
                 const char = context.characters[context.characterId];
-                worldName = char?.data?.extensions?.world;
-            }
+                const worldName = char?.data?.extensions?.world;
 
-            // 优先尝试从API获取外部世界书（强制刷新时跳过缓存）
-            if (worldName) {
-                console.log('[开场白生成器] 发现外部关联世界书:', worldName);
-                
-                try {
-                    // 获取SillyTavern请求头
-                    const headers = typeof context.getRequestHeaders === 'function'
-                        ? context.getRequestHeaders()
-                        : { 'Content-Type': 'application/json' };
+                if (worldName) {
+                    console.log('[开场白生成器] 发现外部关联世界书:', worldName);
 
-                    // 强制从API获取最新数据，跳过缓存
-                    console.log('[开场白生成器] 从API强制刷新世界书数据...');
-                    const response = await fetch('/api/worldinfo/get', {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ name: worldName })
-                    });
-                    
-                    if (response.ok) {
-                        const worldData = await response.json();
-                        console.log('[开场白生成器] 从API获取世界书数据成功');
-                        entries = extractEntriesFromWorldData(worldData);
-                        
-                        // 更新缓存以保持一致性
-                        if (forceRefresh && typeof window.worldInfoCache !== 'undefined') {
-                            window.worldInfoCache.set(worldName, worldData);
-                            console.log('[开场白生成器] 已更新worldInfoCache');
+                    try {
+                        const headers = typeof context.getRequestHeaders === 'function'
+                            ? context.getRequestHeaders()
+                            : { 'Content-Type': 'application/json' };
+
+                        console.log('[开场白生成器] 从API强制刷新世界书数据...');
+                        const response = await fetch('/api/worldinfo/get', {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify({ name: worldName })
+                        });
+
+                        if (response.ok) {
+                            const worldData = await response.json();
+                            console.log('[开场白生成器] 从API获取世界书数据成功');
+                            entries = extractEntriesFromWorldData(worldData);
+
+                            if (forceRefresh && typeof window.worldInfoCache !== 'undefined') {
+                                window.worldInfoCache.set(worldName, worldData);
+                            }
+                        } else {
+                            console.warn('[开场白生成器] API返回错误:', response.status);
+                            if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
+                                const worldData = window.worldInfoCache.get(worldName);
+                                entries = extractEntriesFromWorldData(worldData);
+                            }
                         }
-                    } else {
-                        console.warn('[开场白生成器] API返回错误:', response.status);
-                        // 回退到缓存
+                    } catch (e) {
+                        console.warn('[开场白生成器] 加载外部世界书失败:', e);
                         if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
                             const worldData = window.worldInfoCache.get(worldName);
-                            console.log('[开场白生成器] 回退到cache获取世界书数据');
                             entries = extractEntriesFromWorldData(worldData);
                         }
                     }
-                } catch (e) {
-                    console.warn('[开场白生成器] 加载外部世界书失败:', e);
-                    // 回退到缓存
-                    if (typeof window.worldInfoCache !== 'undefined' && window.worldInfoCache.has(worldName)) {
-                        const worldData = window.worldInfoCache.get(worldName);
-                        console.log('[开场白生成器] 回退到cache获取世界书数据');
-                        entries = extractEntriesFromWorldData(worldData);
-                    }
                 }
-            }
 
-            // 如果外部世界书为空，尝试从角色卡内嵌的character_book获取
-            if (entries.length === 0) {
-                entries = getCharacterBookEntries(context);
-                console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
+                // 如果外部世界书为空，尝试从角色卡内嵌的character_book获取
+                if (entries.length === 0) {
+                    entries = getCharacterBookEntries(context);
+                    console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
+                }
             }
 
             console.log('[开场白生成器] 最终获取到世界书条目数:', entries.length);
 
-            if (entries.length === 0) {
-                container.innerHTML = '<div style="color: #888;">无可用条目</div>';
-                return;
+            window._fmgWorldEntries = entries;
+
+            // 如果没有保存的选择，初始化为启用的条目
+            if (!settings.selectedWorldEntries || settings.selectedWorldEntries.length === 0) {
+                const defaultSelections = [];
+                entries.forEach((entry, idx) => {
+                    if (entry.enabled !== false) {
+                        const identifier = entry.name || `wi_${idx}`;
+                        defaultSelections.push(identifier);
+                    }
+                });
+                settings.selectedWorldEntries = defaultSelections;
+                saveSettings();
             }
 
-            window._fmgWorldEntries = entries;
-            const selected = settings.selectedWorldEntries || [];
-
-            container.innerHTML = entries.map((entry, index) => {
-                // 默认只勾选启用的条目
-                const isChecked = entry.enabled !== false;
-                const badge = entry.constant ? '<span class="fmg-badge">常驻</span>' : '';
-                const disabledBadge = entry.enabled === false ? '<span class="fmg-badge-off">禁用</span>' : '';
-
-                return `
-                    <div class="fmg-wi-item">
-                        <label>
-                            <input type="checkbox" class="fmg-wi-cb" data-index="${index}" ${isChecked ? 'checked' : ''}>
-                            ${escapeHtml(entry.name)} ${badge}${disabledBadge}
-                        </label>
-                    </div>
-                `;
-            }).join('');
+            // 更新计数
+            updateCounts();
 
         } catch (e) {
             console.error('[开场白生成器] 加载世界书失败:', e);
-            container.innerHTML = '<div style="color: #ff6464;">加载失败: ' + e.message + '</div>';
         }
     }
 
@@ -577,12 +587,242 @@
 
     function getSelectedWorldInfo() {
         const entries = window._fmgWorldEntries || [];
+        const savedSelections = settings.selectedWorldEntries || [];
         const selected = [];
 
-        document.querySelectorAll('.fmg-wi-cb:checked').forEach(cb => {
-            const idx = parseInt(cb.dataset.index);
-            if (entries[idx]) {
-                selected.push(entries[idx]);
+        // 使用保存的选择
+        entries.forEach((entry, idx) => {
+            const identifier = entry.name || `wi_${idx}`;
+            if (savedSelections.includes(identifier)) {
+                selected.push(entry);
+            }
+        });
+
+        return selected;
+    }
+
+    function updateCounts() {
+        // 更新世界书计数
+        const wiEntries = window._fmgWorldEntries || [];
+        const wiSelected = (settings.selectedWorldEntries || []).length;
+        const wiCountEl = document.getElementById('fmg-wi-count');
+        if (wiCountEl) {
+            wiCountEl.textContent = `${wiSelected}/${wiEntries.length}`;
+        }
+
+        // 更新预设计数
+        const presetEntries = window._fmgPresetPrompts || [];
+        const presetSelected = (settings.selectedPresetPrompts || []).length;
+        const presetCountEl = document.getElementById('fmg-preset-count');
+        if (presetCountEl) {
+            presetCountEl.textContent = `${presetSelected}/${presetEntries.length}`;
+        }
+    }
+
+    function openSelectionModal(type) {
+        // 移除已存在的弹窗
+        const existing = document.getElementById('fmg-selection-modal');
+        if (existing) existing.remove();
+
+        const isWorldInfo = type === 'worldinfo';
+        const title = isWorldInfo ? '📚 选择世界书条目' : '📋 选择预设条目';
+        const entries = isWorldInfo ? (window._fmgWorldEntries || []) : (window._fmgPresetPrompts || []);
+        const savedSelections = isWorldInfo
+            ? (settings.selectedWorldEntries || [])
+            : (settings.selectedPresetPrompts || []);
+
+        if (entries.length === 0) {
+            if (typeof toastr !== 'undefined') {
+                toastr.warning('没有可用的条目');
+            }
+            return;
+        }
+
+        // 生成列表HTML
+        const listHtml = entries.map((entry, index) => {
+            const name = isWorldInfo
+                ? (entry.name || `条目${index + 1}`)
+                : (entry.name || entry.identifier || `条目${index + 1}`);
+            const identifier = isWorldInfo
+                ? (entry.name || `wi_${index}`)
+                : (entry.identifier || entry.name || `prompt_${index}`);
+            const isEnabled = entry.enabled !== false;
+            const isChecked = savedSelections.includes(identifier);
+
+            const badges = [];
+            if (isWorldInfo) {
+                if (entry.constant) badges.push('<span class="fmg-badge">常驻</span>');
+                if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
+            } else {
+                badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
+                if (entry.role) badges.push(`<span class="fmg-badge" style="background:rgba(100,200,255,0.2);color:#64c8ff;">${entry.role}</span>`);
+            }
+
+            return `
+                <div class="fmg-select-item">
+                    <label>
+                        <input type="checkbox" class="fmg-select-cb" data-identifier="${escapeHtml(identifier)}" ${isChecked ? 'checked' : ''}>
+                        <span class="fmg-select-name">${escapeHtml(name)}</span>
+                        ${badges.join('')}
+                    </label>
+                </div>
+            `;
+        }).join('');
+
+        const modal = document.createElement('div');
+        modal.id = 'fmg-selection-modal';
+        modal.innerHTML = `
+            <div class="fmg-select-overlay"></div>
+            <div class="fmg-select-content">
+                <div class="fmg-select-header">
+                    <h4>${title}</h4>
+                    <div class="fmg-btn-group">
+                        <button class="fmg-btn-small" id="fmg-select-all">全选</button>
+                        <button class="fmg-btn-small" id="fmg-select-none">清空</button>
+                    </div>
+                </div>
+                <div class="fmg-select-body">
+                    ${listHtml}
+                </div>
+                <div class="fmg-select-footer">
+                    <span class="fmg-select-info" id="fmg-select-info">已选择 0 项</span>
+                    <div class="fmg-btn-group">
+                        <button class="fmg-btn fmg-btn-secondary" id="fmg-select-cancel">取消</button>
+                        <button class="fmg-btn fmg-btn-primary" id="fmg-select-confirm">确认</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // 更新选中计数
+        const updateSelectInfo = () => {
+            const count = modal.querySelectorAll('.fmg-select-cb:checked').length;
+            const infoEl = document.getElementById('fmg-select-info');
+            if (infoEl) infoEl.textContent = `已选择 ${count} 项`;
+        };
+        updateSelectInfo();
+
+        // 绑定事件
+        modal.querySelector('.fmg-select-overlay').onclick = () => modal.remove();
+        modal.querySelector('#fmg-select-cancel').onclick = () => modal.remove();
+
+        modal.querySelector('#fmg-select-all').onclick = () => {
+            modal.querySelectorAll('.fmg-select-cb').forEach(cb => cb.checked = true);
+            updateSelectInfo();
+        };
+
+        modal.querySelector('#fmg-select-none').onclick = () => {
+            modal.querySelectorAll('.fmg-select-cb').forEach(cb => cb.checked = false);
+            updateSelectInfo();
+        };
+
+        modal.querySelectorAll('.fmg-select-cb').forEach(cb => {
+            cb.onchange = updateSelectInfo;
+        });
+
+        modal.querySelector('#fmg-select-confirm').onclick = () => {
+            const selectedIdentifiers = [];
+            modal.querySelectorAll('.fmg-select-cb:checked').forEach(cb => {
+                selectedIdentifiers.push(cb.dataset.identifier);
+            });
+
+            if (isWorldInfo) {
+                settings.selectedWorldEntries = selectedIdentifiers;
+            } else {
+                settings.selectedPresetPrompts = selectedIdentifiers;
+            }
+            saveSettings();
+            updateCounts();
+            modal.remove();
+
+            console.log(`[开场白生成器] 已保存${isWorldInfo ? '世界书' : '预设'}选择:`, selectedIdentifiers);
+        };
+    }
+
+    // ========================================
+    // 预设条目
+    // ========================================
+
+    function loadPresetPrompts(context) {
+        const incPresetCheckbox = document.getElementById('fmg-inc-preset');
+        window._fmgPresetPrompts = [];
+
+        try {
+            // 获取 Chat Completion 设置
+            const chatSettings = context.chatCompletionSettings;
+            console.log('[开场白生成器] chatCompletionSettings:', chatSettings);
+
+            if (!chatSettings || !chatSettings.prompts) {
+                updateCounts();
+                return;
+            }
+
+            // 获取 prompts 数组
+            const prompts = chatSettings.prompts || [];
+            console.log('[开场白生成器] prompts:', prompts);
+
+            // 过滤出有内容的条目
+            const validPrompts = prompts.filter(p => p && (p.content || p.prompt));
+
+            window._fmgPresetPrompts = validPrompts;
+
+            // 恢复总开关状态
+            if (incPresetCheckbox) {
+                incPresetCheckbox.checked = settings.includePresetPrompts;
+            }
+
+            // 如果没有保存的选择，初始化为启用的条目
+            if (!settings.selectedPresetPrompts || settings.selectedPresetPrompts.length === 0) {
+                const defaultSelections = [];
+                validPrompts.forEach((prompt, idx) => {
+                    if (prompt.enabled !== false) {
+                        const identifier = prompt.identifier || prompt.name || `prompt_${idx}`;
+                        defaultSelections.push(identifier);
+                    }
+                });
+                settings.selectedPresetPrompts = defaultSelections;
+                saveSettings();
+            }
+
+            // 更新计数
+            updateCounts();
+
+        } catch (e) {
+            console.error('[开场白生成器] 加载预设条目失败:', e);
+        }
+    }
+
+    function savePresetSelections() {
+        const selectedIdentifiers = [];
+        document.querySelectorAll('.fmg-preset-cb:checked').forEach(cb => {
+            const identifier = cb.dataset.identifier;
+            if (identifier) {
+                selectedIdentifiers.push(identifier);
+            }
+        });
+        settings.selectedPresetPrompts = selectedIdentifiers;
+        saveSettings();
+        console.log('[开场白生成器] 已保存预设勾选状态:', selectedIdentifiers);
+    }
+
+    function selectAllPresets(select) {
+        document.querySelectorAll('.fmg-preset-cb').forEach(cb => {
+            cb.checked = select;
+        });
+        // 保存勾选状态
+        savePresetSelections();
+    }
+
+    function getSelectedPresets() {
+        const prompts = window._fmgPresetPrompts || [];
+        const savedSelections = settings.selectedPresetPrompts || [];
+        const selected = [];
+
+        prompts.forEach((prompt, idx) => {
+            const identifier = prompt.identifier || prompt.name || `prompt_${idx}`;
+            if (savedSelections.includes(identifier)) {
+                selected.push(prompt);
             }
         });
 
@@ -641,8 +881,22 @@
                 ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
                 : '无选择的世界书条目';
 
+            // 收集预设条目（如果启用）
+            let presetText = '';
+            const incPresetCheckbox = document.getElementById('fmg-inc-preset');
+            if (incPresetCheckbox && incPresetCheckbox.checked) {
+                const presets = getSelectedPresets();
+                if (presets.length > 0) {
+                    presetText = presets.map(p => {
+                        const name = p.name || p.identifier || '未命名';
+                        const content = p.content || p.prompt || '';
+                        return `【${name}】\n${content}`;
+                    }).join('\n\n');
+                }
+            }
+
             // 构建提示词
-            const prompt = buildPrompt(char.name, charInfo.join('\n\n'), worldInfoText, userPrompt);
+            const prompt = buildPrompt(char.name, charInfo.join('\n\n'), worldInfoText, presetText, userPrompt);
 
             // 调用API
             const result = await callAPI(prompt);
@@ -657,7 +911,12 @@
         }
     }
 
-    function buildPrompt(charName, charInfo, worldInfo, userRequest) {
+    function buildPrompt(charName, charInfo, worldInfo, presetInfo, userRequest) {
+        let presetSection = '';
+        if (presetInfo && presetInfo.trim()) {
+            presetSection = `\n## 预设要求（重要！请严格遵守）\n${presetInfo}\n`;
+        }
+
         return `你是一个专业的角色扮演开场白撰写助手。请根据以下信息，为角色"${charName}"创作一段开场白。
 
 ## 角色信息
@@ -665,7 +924,7 @@ ${charInfo || '无'}
 
 ## 世界书设定
 ${worldInfo}
-
+${presetSection}
 ## 用户需求
 ${userRequest}
 

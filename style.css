@@ -536,3 +536,130 @@
         border-radius: 0;
     }
 }
+
+/* ========================================
+   选择弹窗样式
+   ======================================== */
+
+/* 紧凑区块 */
+.fmg-section-compact {
+    padding: 8px 12px;
+}
+
+.fmg-section-compact .fmg-section-header {
+    margin-bottom: 0;
+}
+
+.fmg-count {
+    font-size: 11px;
+    color: var(--SmartThemeQuoteColor, #888);
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.fmg-btn-open {
+    background: rgba(100, 200, 255, 0.15) !important;
+    color: #64c8ff !important;
+}
+
+.fmg-btn-open:hover {
+    background: rgba(100, 200, 255, 0.25) !important;
+}
+
+/* 选择弹窗 */
+#fmg-selection-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100001;
+}
+
+.fmg-select-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(2px);
+}
+
+.fmg-select-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 450px;
+    max-width: 90vw;
+    max-height: 70vh;
+    background: var(--SmartThemeBlurTintColor, #1a1a2e);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.fmg-select-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--SmartThemeBlurTintColor, #252542);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+}
+
+.fmg-select-header h4 {
+    margin: 0;
+    font-size: 15px;
+    color: var(--SmartThemeBodyColor, #fff);
+}
+
+.fmg-select-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    max-height: 50vh;
+}
+
+.fmg-select-item {
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.fmg-select-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.fmg-select-item label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor, #eee);
+}
+
+.fmg-select-item input[type="checkbox"] {
+    flex-shrink: 0;
+}
+
+.fmg-select-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fmg-select-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--SmartThemeBlurTintColor, #252542);
+    border-top: 1px solid var(--SmartThemeBorderColor, #444);
+}
+
+.fmg-select-info {
+    font-size: 12px;
+    color: var(--SmartThemeQuoteColor, #888);
+}
