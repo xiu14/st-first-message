@@ -535,6 +535,29 @@
         max-height: 100vh;
         border-radius: 0;
     }
+
+    /* 选择弹窗移动端适配 */
+    .fmg-select-content {
+        position: fixed;
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100vw;
+        height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .fmg-select-body {
+        max-height: none;
+        flex: 1;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fmg-select-footer {
+        padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
 }
 
 /* ========================================
