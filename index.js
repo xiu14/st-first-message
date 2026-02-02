@@ -1158,6 +1158,17 @@ ${userRequest}
         }
 
         const result = await response.json();
+
+        // 验证响应结构
+        if (!result.choices || !result.choices[0]) {
+            console.error('[开场白生成器] API响应异常:', result);
+            throw new Error('API响应格式异常，请检查API类型是否选择正确');
+        }
+        if (!result.choices[0].message || !result.choices[0].message.content) {
+            console.error('[开场白生成器] API响应内容缺失:', result);
+            throw new Error('API未返回有效内容，请检查模型是否正确');
+        }
+
         return result.choices[0].message.content;
     }
 
@@ -1179,6 +1190,20 @@ ${userRequest}
         }
 
         const result = await response.json();
+
+        // 验证响应结构
+        if (!result.candidates || !result.candidates[0]) {
+            console.error('[开场白生成器] Gemini响应异常:', result);
+            if (result.error) {
+                throw new Error(`Gemini错误: ${result.error.message || JSON.stringify(result.error)}`);
+            }
+            throw new Error('Gemini响应格式异常，请检查API配置');
+        }
+        if (!result.candidates[0].content || !result.candidates[0].content.parts) {
+            console.error('[开场白生成器] Gemini响应内容缺失:', result);
+            throw new Error('Gemini未返回有效内容，可能是模型拒绝生成或配置错误');
+        }
+
         return result.candidates[0].content.parts[0].text;
     }
 
