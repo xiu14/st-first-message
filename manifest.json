@@ -1,0 +1,10 @@
+{
+  "display_name": "开场白生成器",
+  "loading_order": 10,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "User",
+  "version": "2.0.0"
+}
