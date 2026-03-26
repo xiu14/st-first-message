@@ -29,6 +29,30 @@
 
     let settings = { ...DEFAULT_SETTINGS };
 
+    // 可编辑字段标签映射
+    const FIELD_LABELS = {
+        description: '描述',
+        personality: '性格',
+        scenario: '场景',
+        first_mes: '开场白',
+        mes_example: '对话示例',
+        system_prompt: '系统提示词',
+        post_history_instructions: '越权提示词',
+        creator_notes: '创作者备注'
+    };
+
+    // 字段名到 _fmgCharData 缓存键的映射
+    const FIELD_TO_CACHE_KEY = {
+        description: 'desc',
+        personality: 'pers',
+        scenario: 'scen',
+        first_mes: 'first',
+        mes_example: 'mes_example',
+        system_prompt: 'system_prompt',
+        post_history_instructions: 'post_history_instructions',
+        creator_notes: 'creator_notes'
+    };
+
     // ========================================
     // 初始化
     // ========================================
@@ -144,6 +168,7 @@
             
             <div class="fmg-tabs">
                 <button class="fmg-tab active" data-tab="generate">生成</button>
+                <button class="fmg-tab" data-tab="statusbar">状态栏</button>
                 <button class="fmg-tab" data-tab="api">API</button>
             </div>
             
@@ -206,6 +231,85 @@
                     </div>
                     
                     <div id="fmg-status" class="fmg-status" style="display: none;"></div>
+                </div>
+                
+                
+                <!-- 状态栏页 -->
+                <div class="fmg-tab-content" data-tab="statusbar">
+                    <div class="fmg-sb-container">
+                        <div class="fmg-chat-header">
+                            <span class="fmg-chat-char-info" id="fmg-sb-char-name">未选择角色</span>
+                            <button class="fmg-btn-small" id="fmg-sb-refresh" title="刷新角色数据">🔄 刷新</button>
+                            <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-sb-clear" title="清除状态栏并重置">🗑️ 清除</button>
+                        </div>
+                        
+                        <!-- 需求输入 -->
+                        <div class="fmg-section">
+                            <label>✍️ 描述你想要的状态栏</label>
+                            <textarea id="fmg-sb-prompt" class="fmg-textarea" 
+                                placeholder="描述你想要的状态栏样式和内容...&#10;例如：包含日期、时间、地点、心情、穿着，用羊皮纸风格美化"></textarea>
+                        </div>
+                        
+                        <div class="fmg-actions">
+                            <button class="fmg-btn fmg-btn-primary" id="fmg-sb-generate">✨ 生成状态栏</button>
+                        </div>
+                        
+                        <!-- 预览区 -->
+                        <div id="fmg-sb-preview-area" style="display:none;">
+                            <!-- 视觉效果预览 -->
+                            <div class="fmg-sb-preview-section">
+                                <div class="fmg-sb-preview-header" data-target="fmg-sb-visual-body">
+                                    <span>👁️ 效果预览</span>
+                                    <span class="fmg-collapse-arrow">▼</span>
+                                </div>
+                                <div class="fmg-sb-preview-body open" id="fmg-sb-visual-body">
+                                    <div class="fmg-sb-visual-content" id="fmg-sb-visual-content">等待生成...</div>
+                                </div>
+                            </div>
+
+                            <!-- 世界书条目预览 -->
+                            <div class="fmg-sb-preview-section">
+                                <div class="fmg-sb-preview-header" data-target="fmg-sb-wi-body">
+                                    <span>📋 世界书条目预览</span>
+                                    <span class="fmg-collapse-arrow">▼</span>
+                                </div>
+                                <div class="fmg-sb-preview-body open" id="fmg-sb-wi-body">
+                                    <pre class="fmg-sb-code" id="fmg-sb-wi-content">等待生成...</pre>
+                                </div>
+                            </div>
+                            
+                            <!-- 正则脚本预览 -->
+                            <div class="fmg-sb-preview-section">
+                                <div class="fmg-sb-preview-header" data-target="fmg-sb-regex-body">
+                                    <span>🎨 正则脚本预览</span>
+                                    <span class="fmg-collapse-arrow">▼</span>
+                                </div>
+                                <div class="fmg-sb-preview-body open" id="fmg-sb-regex-body">
+                                    <div class="fmg-sb-regex-field">
+                                        <label>查找正则</label>
+                                        <pre class="fmg-sb-code" id="fmg-sb-regex-find">等待生成...</pre>
+                                    </div>
+                                    <div class="fmg-sb-regex-field">
+                                        <label>替换为 (HTML/CSS)</label>
+                                        <pre class="fmg-sb-code fmg-sb-code-large" id="fmg-sb-regex-replace">等待生成...</pre>
+                                    </div>
+                                    <div class="fmg-sb-regex-field">
+                                        <label>修剪掉</label>
+                                        <pre class="fmg-sb-code" id="fmg-sb-regex-trim">等待生成...</pre>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 应用按钮 -->
+                            <div class="fmg-actions">
+                                <button class="fmg-btn fmg-btn-secondary" id="fmg-sb-apply-wi">📋 应用世界书条目</button>
+                                <button class="fmg-btn fmg-btn-primary" id="fmg-sb-apply-regex">🎨 应用正则脚本</button>
+                                <button class="fmg-btn" id="fmg-sb-regenerate" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">🔄 重新生成</button>
+                            </div>
+                        </div>
+                        
+                        <div id="fmg-sb-status" class="fmg-status" style="display: none;"></div>
+                    </div>
                 </div>
                 
                 <!-- API设置页 -->
@@ -342,6 +446,44 @@
             if (e.target.id === 'fmg-inc-scen') settings.includeScenario = e.target.checked;
             if (e.target.id === 'fmg-inc-first') settings.includeCurrentFirstMes = e.target.checked;
         });
+
+        // 状态栏页 - 生成/重新生成
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-sb-generate' || e.target.id === 'fmg-sb-regenerate') generateStatusBar();
+        });
+
+        // 状态栏页 - 刷新
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-sb-clear') clearStatusBar();
+            if (e.target.id === 'fmg-sb-refresh') {
+                loadCharacterData();
+                updateSbCharName();
+            }
+        });
+
+        // 状态栏页 - 应用世界书
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-sb-apply-wi') applyStatusBarWorldEntry();
+        });
+
+        // 状态栏页 - 应用正则
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-sb-apply-regex') applyStatusBarRegex();
+        });
+
+        // 状态栏页 - 预览区折叠
+        document.addEventListener('click', (e) => {
+            const header = e.target.closest('.fmg-sb-preview-header');
+            if (header) {
+                const targetId = header.dataset.target;
+                const body = document.getElementById(targetId);
+                const arrow = header.querySelector('.fmg-collapse-arrow');
+                if (body) {
+                    const isOpen = body.classList.toggle('open');
+                    if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+                }
+            }
+        });
     }
 
     // ========================================
@@ -412,8 +554,27 @@
 
                 dataPreviewEl.innerHTML = previews.join(' ');
 
-                // 缓存角色数据
-                window._fmgCharData = { desc, pers, scen, first, name: char.name };
+                // 缓存角色数据（包含全部字段）
+                const d = char.data || {};
+                window._fmgCharData = {
+                    name: char.name,
+                    desc, pers, scen, first,
+                    mes_example: d.mes_example || char.mes_example || '',
+                    system_prompt: d.system_prompt || '',
+                    post_history_instructions: d.post_history_instructions || '',
+                    creator_notes: d.creator_notes || '',
+                    creator: d.creator || '',
+                    character_version: d.character_version || '',
+                    tags: d.tags || char.tags || [],
+                    alternate_greetings: d.alternate_greetings || [],
+                    extensions: d.extensions || {},
+                    talkativeness: d.extensions?.talkativeness || '',
+                    depth_prompt: d.extensions?.depth_prompt || null,
+                    fav: char.fav || false,
+                    spec: d.spec || '',
+                    spec_version: d.spec_version || '',
+                    _raw: d
+                };
 
             } else {
                 charNameEl.textContent = '未选择角色';
@@ -427,6 +588,9 @@
 
             // 加载预设条目
             loadPresetPrompts(context);
+
+            // 更新状态栏数据并触发角色切换清理检测
+            updateSbCharName();
 
         } catch (e) {
             console.error('[开场白生成器] 加载数据失败:', e);
@@ -617,6 +781,7 @@
         if (presetCountEl) {
             presetCountEl.textContent = `${presetSelected}/${presetEntries.length}`;
         }
+
     }
 
     function openSelectionModal(type) {
@@ -827,6 +992,508 @@
         });
 
         return selected;
+    }
+
+    // ========================================
+    // ========================================
+    // 状态栏生成与应用
+    // ========================================
+
+    // 缓存生成结果
+    window._fmgStatusBarResult = null;
+
+    function updateSbCharName() {
+        const nameEl = document.getElementById('fmg-sb-char-name');
+        const charData = window._fmgCharData;
+        if (nameEl) {
+            if (charData && charData.name) {
+                if (window._fmgCurrentSbCharacterId !== undefined && window._fmgCurrentSbCharacterId !== charData.name) {
+                    clearStatusBar();
+                }
+                window._fmgCurrentSbCharacterId = charData.name;
+                nameEl.textContent = '🎭 ' + charData.name;
+                nameEl.classList.add('active');
+            } else {
+                if (window._fmgCurrentSbCharacterId) clearStatusBar();
+                window._fmgCurrentSbCharacterId = null;
+                nameEl.textContent = '未选择角色';
+                nameEl.classList.remove('active');
+            }
+        }
+    }
+
+    function clearStatusBar() {
+        window._fmgStatusBarResult = null;
+        const promptInput = document.getElementById('fmg-sb-prompt');
+        if (promptInput) promptInput.value = '';
+        const previewArea = document.getElementById('fmg-sb-preview-area');
+        if (previewArea) previewArea.style.display = 'none';
+        
+        const resetEls = ['fmg-sb-visual-content', 'fmg-sb-wi-content', 'fmg-sb-regex-find', 'fmg-sb-regex-replace', 'fmg-sb-regex-trim'];
+        resetEls.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '等待生成...';
+        });
+        const statusEl = document.getElementById('fmg-sb-status');
+        if (statusEl) statusEl.style.display = 'none';
+    }
+
+    async function generateStatusBar() {
+        const promptInput = document.getElementById('fmg-sb-prompt');
+        const userPrompt = promptInput.value.trim();
+
+        if (!userPrompt) {
+            showStatus('fmg-sb-status', 'error', '请描述你想要的状态栏');
+            return;
+        }
+        if (!settings.apiUrl || !settings.apiKey) {
+            showStatus('fmg-sb-status', 'error', '请先在API页面配置API');
+            return;
+        }
+        if (!window._fmgCharData) {
+            showStatus('fmg-sb-status', 'error', '请先选择角色并刷新数据');
+            return;
+        }
+
+        showStatus('fmg-sb-status', 'loading', '正在生成状态栏...');
+        const genBtn = document.getElementById('fmg-sb-generate');
+        if (genBtn) genBtn.disabled = true;
+
+        try {
+            const charData = window._fmgCharData;
+            const worldInfo = getSelectedWorldInfo();
+            const wiText = worldInfo.length > 0
+                ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
+                : '无世界书条目';
+
+            const systemPrompt = `你是一个专业的 SillyTavern 状态栏设计师。根据用户的需求，生成状态栏的世界书条目内容和正则脚本。
+
+当前角色: ${charData.name}
+角色描述: ${charData.desc || '（空）'}
+角色性格: ${charData.pers || '（空）'}
+角色场景: ${charData.scen || '（空）'}
+世界书设定: ${wiText}
+
+你必须返回一个严格的 JSON 对象，不要包含任何其他文字，格式如下:
+{
+  "worldbook_content": "世界书条目的完整内容，包含 status_block 和 status 标签的状态栏模板",
+  "regex_name": "状态栏",
+  "regex_find": "用于匹配状态栏 XML 标签的正则表达式",
+  "regex_replace": "用 HTML/CSS 美化的替换代码，将 XML 标签转换为漂亮的状态栏 UI",
+  "regex_trim": "需要修剪掉的标签（每行一个）"
+}
+
+重要规则:
+1. worldbook_content 必须包含 <status_block>...</status_block> 包裹，内部使用 <status>...</status> 定义各个字段
+2. 状态栏字段用 XML 标签如 <title>, <date>, <time>, <location>, <mood> 等
+3. regex_find 必须能匹配整个 status 块的内容，使用捕获组提取各字段
+4. regex_replace 使用 $1, $2 等引用捕获组，生成精美的 HTML/CSS 状态栏
+5. regex_trim 列出需要从显示中移除的标签
+6. CSS 样式应该内联在 HTML 中，使用深色主题配色
+7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记`;
+
+            const userMessage = `请为角色"${charData.name}"生成状态栏，需求如下：\n${userPrompt}`;
+
+            let fullContent = '';
+            await callAPIStreamMessages(
+                [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
+                (content) => { fullContent = content; },
+                (finalContent) => {
+                    try {
+                        // 清理可能的 markdown 代码块包裹
+                        let cleaned = finalContent.trim();
+                        if (cleaned.startsWith('```')) {
+                            cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                        }
+                        const result = JSON.parse(cleaned);
+                        window._fmgStatusBarResult = result;
+
+                        // 填充预览区代码
+                        document.getElementById('fmg-sb-wi-content').textContent = result.worldbook_content || '';
+                        document.getElementById('fmg-sb-regex-find').textContent = result.regex_find || '';
+                        document.getElementById('fmg-sb-regex-replace').textContent = result.regex_replace || '';
+                        document.getElementById('fmg-sb-regex-trim').textContent = result.regex_trim || '';
+                        
+                        // 尝试渲染效果预览（不依赖 AI 的正则匹配，而是手动提取标签值填入 HTML 模板）
+                        try {
+                            let previewText = result.worldbook_content || '';
+                            if (result.regex_find && result.regex_replace) {
+                                
+                                // 方案：从 regex_find 提取捕获组对应的 XML 标签名，
+                                // 再从模板中提取这些标签的内容，
+                                // 最后把 $1, $2... 替换进 regex_replace 的 HTML 里。
+                                
+                                // 1. 从 regex_find 中按顺序提取所有捕获组对应的标签名
+                                //    AI 通常写类似 <title>(.*?)</title> 或 <title>([^<]*)</title>
+                                const groupTagPattern = /<(\w+)>\s*\([^)]*\)\s*<\/\1>/g;
+                                const groupTags = [];
+                                let gm;
+                                while ((gm = groupTagPattern.exec(result.regex_find)) !== null) {
+                                    groupTags.push(gm[1]);
+                                }
+                                
+                                // 2. 从模板中提取 <status>...</status> 区块
+                                let statusMatch = previewText.match(/<status[\s>][\s\S]*?<\/status>/i);
+                                let tpl = statusMatch ? statusMatch[0] : previewText;
+                                
+                                // 3. 构建最终 HTML：取 regex_replace，将 $1..$N 替换为对应标签的示例值
+                                let htmlPreview = result.regex_replace;
+                                
+                                if (groupTags.length > 0) {
+                                    for (let i = 0; i < groupTags.length; i++) {
+                                        const tagName = groupTags[i];
+                                        // 从模板提取标签内容
+                                        const tagRe = new RegExp('<' + tagName + '>([\\s\\S]*?)</' + tagName + '>', 'i');
+                                        const tagMatch = tpl.match(tagRe);
+                                        let val = tagMatch ? tagMatch[1].trim() : tagName;
+                                        // 清理 {{变量}} 占位符，替换为示例文字
+                                        val = val.replace(/\{\{([^}]*)\}\}/g, (_, v) => v.trim() || '...');
+                                        // 替换 $1, $2...
+                                        htmlPreview = htmlPreview.replace(new RegExp('\\$' + (i + 1), 'g'), val);
+                                    }
+                                    document.getElementById('fmg-sb-visual-content').innerHTML = htmlPreview;
+                                } else {
+                                    // 如果没提取到捕获组，退而求其次：直接把 $N 替换为示例文字
+                                    htmlPreview = htmlPreview.replace(/\$(\d+)/g, (_, n) => '示例内容' + n );
+                                    document.getElementById('fmg-sb-visual-content').innerHTML = htmlPreview;
+                                }
+                            } else {
+                                document.getElementById('fmg-sb-visual-content').textContent = "需要同时有正则查找和替换才能渲染预览！";
+                            }
+                        } catch (e) {
+                            console.error('[开场白生成器] 预览渲染失败:', e);
+                            document.getElementById('fmg-sb-visual-content').textContent = "预览渲染失败: " + e.message;
+                        }
+
+                        document.getElementById('fmg-sb-preview-area').style.display = '';
+
+                        showStatus('fmg-sb-status', 'success', '生成完成！请预览并应用');
+                    } catch (e) {
+                        console.error('[开场白生成器] 解析状态栏结果失败:', e, finalContent);
+                        showStatus('fmg-sb-status', 'error', '解析生成结果失败，请重试');
+                    }
+                    if (genBtn) genBtn.disabled = false;
+                },
+                (error) => {
+                    showStatus('fmg-sb-status', 'error', '生成失败: ' + error.message);
+                    if (genBtn) genBtn.disabled = false;
+                }
+            );
+        } catch (e) {
+            showStatus('fmg-sb-status', 'error', '生成失败: ' + e.message);
+            if (genBtn) genBtn.disabled = false;
+        }
+    }
+
+    async function applyStatusBarWorldEntry() {
+        const result = window._fmgStatusBarResult;
+        if (!result || !result.worldbook_content) {
+            showStatus('fmg-sb-status', 'error', '请先生成状态栏');
+            return;
+        }
+
+        try {
+            const context = SillyTavern.getContext();
+            if (context.characterId === undefined) throw new Error('未选择角色');
+
+            const char = context.characters[context.characterId];
+            const worldName = char?.data?.extensions?.world;
+            if (!worldName) throw new Error('角色未关联世界书，请先关联一个世界书');
+
+            const headers = typeof context.getRequestHeaders === 'function'
+                ? context.getRequestHeaders()
+                : { 'Content-Type': 'application/json' };
+
+            // 获取当前世界书数据
+            const getResp = await fetch('/api/worldinfo/get', {
+                method: 'POST', headers,
+                body: JSON.stringify({ name: worldName })
+            });
+            if (!getResp.ok) throw new Error('获取世界书失败');
+            const worldData = await getResp.json();
+
+            // 创建新条目
+            const entries = worldData.entries || {};
+            const newId = Object.keys(entries).length > 0
+                ? Math.max(...Object.keys(entries).map(Number)) + 1 : 0;
+
+            entries[newId] = {
+                uid: newId,
+                key: ['状态栏'],
+                keysecondary: [],
+                comment: '状态栏模板',
+                content: result.worldbook_content,
+                constant: true,
+                selective: false,
+                order: 999,
+                position: 4,
+                depth: 0,
+                disable: false,
+                enabled: true,
+                excludeRecursion: false,
+                preventRecursion: false,
+                delayUntilRecursion: false,
+                probability: 100,
+                useProbability: true,
+                group: '',
+                groupOverride: false,
+                groupWeight: 100,
+                scanDepth: null,
+                caseSensitive: null,
+                matchWholeWords: null,
+                automationId: '',
+                role: 0,
+                vectorized: false,
+                sticky: null,
+                cooldown: null,
+                delay: null
+            };
+
+            worldData.entries = entries;
+
+            // 保存世界书
+            const saveResp = await fetch('/api/worldinfo/edit', {
+                method: 'POST', headers,
+                body: JSON.stringify({ name: worldName, data: worldData })
+            });
+            if (!saveResp.ok) throw new Error(`保存世界书失败: HTTP ${saveResp.status}`);
+
+            showStatus('fmg-sb-status', 'success', '世界书条目已创建！');
+            if (typeof toastr !== 'undefined') toastr.success('状态栏世界书条目已添加');
+
+            // 刷新世界书列表
+            loadWorldInfoList(context, true);
+
+        } catch (e) {
+            console.error('[开场白生成器] 应用世界书条目失败:', e);
+            showStatus('fmg-sb-status', 'error', '应用失败: ' + e.message);
+        }
+    }
+
+    async function applyStatusBarRegex() {
+        const result = window._fmgStatusBarResult;
+        if (!result || !result.regex_find) {
+            showStatus('fmg-sb-status', 'error', '请先生成状态栏');
+            return;
+        }
+
+        try {
+            const context = SillyTavern.getContext();
+            if (context.characterId === undefined) throw new Error('未选择角色');
+
+            const char = context.characters[context.characterId];
+            if (!char) throw new Error('角色数据不存在');
+
+            // 构建正则脚本对象
+            const newScript = {
+                scriptName: result.regex_name || '状态栏',
+                findRegex: result.regex_find,
+                replaceString: result.regex_replace,
+                trimStrings: result.regex_trim ? result.regex_trim.split('\n').filter(s => s.trim()) : [],
+                placement: [2], // 2 = AI输出
+                disabled: false,
+                markdownOnly: true,
+                promptOnly: false,
+                runOnEdit: true,
+                substituteRegex: 0,
+                minDepth: null,
+                maxDepth: null
+            };
+
+            // 获取当前的 regex_scripts
+            const currentScripts = char.data?.extensions?.regex_scripts || [];
+
+            // 检查是否已有同名脚本，如有则替换
+            const existingIdx = currentScripts.findIndex(s => s.scriptName === newScript.scriptName);
+            if (existingIdx >= 0) {
+                currentScripts[existingIdx] = newScript;
+            } else {
+                currentScripts.push(newScript);
+            }
+
+            // 通过 merge-attributes 保存
+            const headers = typeof context.getRequestHeaders === 'function'
+                ? context.getRequestHeaders()
+                : { 'Content-Type': 'application/json' };
+
+            // 更新内存
+            if (!char.data.extensions) char.data.extensions = {};
+            char.data.extensions.regex_scripts = currentScripts;
+
+            const response = await fetch('/api/characters/merge-attributes', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    avatar: char.avatar,
+                    data: { extensions: { regex_scripts: currentScripts } }
+                })
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errText}`);
+            }
+
+            showStatus('fmg-sb-status', 'success', '正则脚本已应用！刷新页面后可在局部正则中查看');
+            if (typeof toastr !== 'undefined') toastr.success('状态栏正则脚本已应用');
+
+        } catch (e) {
+            console.error('[开场白生成器] 应用正则脚本失败:', e);
+            showStatus('fmg-sb-status', 'error', '应用失败: ' + e.message);
+        }
+    }
+
+
+    // ========================================
+    // 流式 API 调用
+    // ========================================
+
+    let apiAbortController = null;
+
+    async function callAPIStreamMessages(messages, onChunk, onDone, onError) {
+        apiAbortController = new AbortController();
+
+        try {
+            if (settings.apiType === 'openai') {
+                await callOpenAIStreamMessages(messages, onChunk, onDone, apiAbortController.signal);
+            } else {
+                await callGeminiStreamMessages(messages, onChunk, onDone, apiAbortController.signal);
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                console.log('[开场白生成器] API请求已中断');
+                return;
+            }
+            onError(e);
+        } finally {
+            apiAbortController = null;
+        }
+    }
+
+    async function callOpenAIStreamMessages(messages, onChunk, onDone, signal) {
+        const url = settings.apiUrl.replace(/\/$/, '') + '/chat/completions';
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${settings.apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: settings.model,
+                messages: messages,
+                temperature: 0.8,
+                stream: true
+            }),
+            signal: signal
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`API错误: ${response.status} - ${error}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed === 'data: [DONE]') continue;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const json = JSON.parse(trimmed.slice(6));
+                        const text = json.choices?.[0]?.delta?.content || '';
+                        if (text) {
+                            fullContent += text;
+                            onChunk(fullContent);
+                        }
+                    } catch (e) {
+                        console.warn('[开场白生成器] 解析流数据失败:', trimmed, e);
+                    }
+                }
+            }
+        }
+        onDone(fullContent);
+    }
+
+    async function callGeminiStreamMessages(messages, onChunk, onDone, signal) {
+        const url = settings.apiUrl.replace(/\/$/, '') + '/models/' + settings.model + ':streamGenerateContent?key=' + settings.apiKey + '&alt=sse';
+
+        // 将 messages 转换为 Gemini 格式
+        let systemInstruction = null;
+        const contents = [];
+
+        for (const msg of messages) {
+            if (msg.role === 'system') {
+                systemInstruction = { parts: [{ text: msg.content }] };
+            } else {
+                contents.push({
+                    role: msg.role === 'assistant' ? 'model' : 'user',
+                    parts: [{ text: msg.content }]
+                });
+            }
+        }
+
+        const body = {
+            contents: contents,
+            generationConfig: { temperature: 0.8 }
+        };
+        if (systemInstruction) {
+            body.systemInstruction = systemInstruction;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: signal
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`API错误: ${response.status} - ${error}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed === 'data: [DONE]') continue;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const json = JSON.parse(trimmed.slice(6));
+                        const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                        if (text) {
+                            fullContent += text;
+                            onChunk(fullContent);
+                        }
+                    } catch (e) {
+                        console.warn('[开场白生成器] 解析Gemini流数据失败:', trimmed, e);
+                    }
+                }
+            }
+        }
+        onDone(fullContent);
     }
 
     // ========================================
