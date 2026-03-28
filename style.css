@@ -914,3 +914,202 @@
     color: #888;
     background: rgba(0, 0, 0, 0.1);
 }
+
+/* ========================================
+   历史记录样式
+   ======================================== */
+
+.fmg-history-section {
+    margin-top: 16px;
+}
+
+.fmg-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.fmg-history-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.fmg-history-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(124, 124, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.fmg-history-card:active {
+    transform: translateY(0);
+}
+
+.fmg-history-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 4px;
+    font-size: 11px;
+}
+
+.fmg-history-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(124, 124, 255, 0.2);
+    color: #a0a0ff;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.fmg-history-char {
+    color: #64ffda;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.fmg-history-time {
+    color: #666;
+    margin-left: auto;
+    font-size: 10px;
+}
+
+.fmg-history-card-body {
+    padding: 4px 12px 10px;
+}
+
+.fmg-history-prompt-preview {
+    font-size: 12px;
+    color: var(--SmartThemeBodyColor, #bbb);
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+.fmg-history-content-preview {
+    font-size: 11px;
+    color: #777;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 历史详情弹窗 */
+#fmg-history-detail-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 100002 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.fmg-history-detail-content {
+    width: 650px !important;
+    max-width: 95vw !important;
+}
+
+.fmg-history-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.fmg-history-detail-char {
+    color: #64ffda;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.fmg-history-detail-time {
+    color: #888;
+    font-size: 12px;
+    margin-left: auto;
+}
+
+.fmg-history-detail-section {
+    margin-bottom: 14px;
+}
+
+.fmg-history-detail-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--SmartThemeBodyColor, #ccc);
+    margin-bottom: 8px;
+    padding-left: 2px;
+}
+
+.fmg-history-detail-text {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--SmartThemeBodyColor, #ddd);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.fmg-history-prompt-text {
+    border-left: 3px solid #ffb347;
+    max-height: 100px;
+}
+
+.fmg-history-content-text {
+    border-left: 3px solid #64ffda;
+}
+
+/* 删除按钮（小号危险按钮） */
+.fmg-btn-danger-small {
+    background: rgba(255, 100, 100, 0.15) !important;
+    color: #ff8080 !important;
+    border: 1px solid rgba(255, 100, 100, 0.3) !important;
+}
+
+.fmg-btn-danger-small:hover {
+    background: rgba(255, 100, 100, 0.3) !important;
+    color: #fff !important;
+}
+
+/* 历史详情弹窗移动端适配 */
+@media (max-width: 768px) {
+    .fmg-history-detail-content {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        max-height: 85vh !important;
+        max-height: 85dvh !important;
+    }
+
+    .fmg-history-detail-meta {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .fmg-history-detail-time {
+        margin-left: 0;
+    }
+}

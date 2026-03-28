@@ -24,7 +24,9 @@
         selectedWorldEntries: [],
         // 预设条目相关
         includePresetPrompts: false,
-        selectedPresetPrompts: []
+        selectedPresetPrompts: [],
+        // 开场白历史记录（最多5条）
+        firstMessageHistory: []
     };
 
     let settings = { ...DEFAULT_SETTINGS };
@@ -231,6 +233,18 @@
                     </div>
                     
                     <div id="fmg-status" class="fmg-status" style="display: none;"></div>
+                    
+                    <!-- 历史记录区 -->
+                    <div class="fmg-section fmg-history-section" id="fmg-history-section" style="display: none;">
+                        <div class="fmg-section-header">
+                            <h4>📜 最近生成记录</h4>
+                            <div class="fmg-btn-group">
+                                <span class="fmg-count" id="fmg-history-count">0/5</span>
+                                <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-history-clear">🗑️ 清除</button>
+                            </div>
+                        </div>
+                        <div class="fmg-history-list" id="fmg-history-list"></div>
+                    </div>
                 </div>
                 
                 
@@ -386,9 +400,9 @@
     // ========================================
 
     function bindEvents() {
-        // 关闭和遮罩
+        // 关闭和遮罩（只关闭主弹窗自己的关闭按钮）
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('fmg-close-btn')) closePopup();
+            if (e.target.classList.contains('fmg-close-btn') && e.target.closest('#fmg-popup')) closePopup();
             if (e.target.id === 'fmg-overlay') closePopup();
         });
 
@@ -484,6 +498,22 @@
                 }
             }
         });
+
+        // 历史记录卡片点击
+        document.addEventListener('click', (e) => {
+            const card = e.target.closest('.fmg-history-card');
+            if (card) {
+                const index = parseInt(card.dataset.historyIndex);
+                if (!isNaN(index)) {
+                    showHistoryDetail(index);
+                }
+            }
+        });
+
+        // 历史记录清除按钮
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-history-clear') clearAllHistory();
+        });
     }
 
     // ========================================
@@ -494,6 +524,7 @@
         document.getElementById('fmg-overlay').classList.add('show');
         document.getElementById('fmg-popup').classList.add('show');
         loadCharacterData();
+        renderHistoryList();
     }
 
     function closePopup() {
@@ -1086,11 +1117,17 @@
 重要规则:
 1. worldbook_content 必须包含 <status_block>...</status_block> 包裹，内部使用 <status>...</status> 定义各个字段
 2. 状态栏字段用 XML 标签如 <title>, <date>, <time>, <location>, <mood> 等
-3. regex_find 必须能匹配整个 status 块的内容，使用捕获组提取各字段
+3. regex_find 必须能匹配整个 status 块的内容，使用捕获组提取各字段。目标需求：【比如：匹配从 <status_block> 到 <\\/status_block> 之间的所有数据，并提取出 date 和 time】
 4. regex_replace 使用 $1, $2 等引用捕获组，生成精美的 HTML/CSS 状态栏
 5. regex_trim 列出需要从显示中移除的标签
 6. CSS 样式应该内联在 HTML 中，使用深色主题配色
-7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记`;
+7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记
+
+严格技术约束:
+- 不要使用 (?s) 或结尾的 /s 标志。
+- 若需匹配包含换行符在内的任意字符，请统一使用 [\\s\\S]*? 代替 .*?。
+- 必须对所有的正斜杠（/）进行反斜杠转义（即写成 \\/）。
+- 请使用非贪婪模式，防止匹配越界。`;
 
             const userMessage = `请为角色"${charData.name}"生成状态栏，需求如下：\n${userPrompt}`;
 
@@ -1582,6 +1619,8 @@
                 (finalContent) => {
                     updateStreamPreview(finalContent, true);
                     showStatus('fmg-status', 'success', '生成完成！请预览并确认');
+                    // 保存到历史记录
+                    saveToHistory(userPrompt, finalContent, char.name);
                 },
                 // onError: 出错
                 (error) => {
@@ -2156,6 +2195,212 @@ ${userRequest}
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // ========================================
+    // 历史记录功能
+    // ========================================
+
+    function saveToHistory(prompt, content, charName) {
+        if (!settings.firstMessageHistory) {
+            settings.firstMessageHistory = [];
+        }
+
+        const record = {
+            id: Date.now(),
+            prompt: prompt,
+            content: content,
+            charName: charName || '未知角色',
+            timestamp: new Date().toLocaleString('zh-CN')
+        };
+
+        // 插入到最前面
+        settings.firstMessageHistory.unshift(record);
+
+        // 最多保留5条
+        if (settings.firstMessageHistory.length > 5) {
+            settings.firstMessageHistory = settings.firstMessageHistory.slice(0, 5);
+        }
+
+        saveSettings();
+        renderHistoryList();
+    }
+
+    function renderHistoryList() {
+        const section = document.getElementById('fmg-history-section');
+        const listEl = document.getElementById('fmg-history-list');
+        const countEl = document.getElementById('fmg-history-count');
+        const allHistory = settings.firstMessageHistory || [];
+
+        if (!section || !listEl) return;
+
+        // 获取当前角色名，按角色过滤
+        const currentCharName = window._fmgCharData ? window._fmgCharData.name : null;
+        const history = currentCharName
+            ? allHistory.filter(r => r.charName === currentCharName)
+            : [];
+
+        if (history.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = '';
+        if (countEl) countEl.textContent = `${history.length}/5`;
+
+        listEl.innerHTML = history.map((record) => {
+            // 找到该记录在完整列表中的真实 index
+            const realIndex = allHistory.indexOf(record);
+            const promptPreview = (record.prompt || '').substring(0, 40) + (record.prompt && record.prompt.length > 40 ? '...' : '');
+            const contentPreview = (record.content || '').substring(0, 60) + (record.content && record.content.length > 60 ? '...' : '');
+            return `
+                <div class="fmg-history-card" data-history-index="${realIndex}">
+                    <div class="fmg-history-card-header">
+                        <span class="fmg-history-char">${escapeHtml(record.charName || '')}</span>
+                        <span class="fmg-history-time">${escapeHtml(record.timestamp || '')}</span>
+                    </div>
+                    <div class="fmg-history-card-body">
+                        <div class="fmg-history-prompt-preview">📝 ${escapeHtml(promptPreview)}</div>
+                        <div class="fmg-history-content-preview">${escapeHtml(contentPreview)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function showHistoryDetail(index) {
+        const history = settings.firstMessageHistory || [];
+        if (index < 0 || index >= history.length) return;
+
+        const record = history[index];
+
+        // 移除已存在的弹窗
+        const existing = document.getElementById('fmg-history-detail-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'fmg-history-detail-modal';
+        modal.innerHTML = `
+            <div class="fmg-preview-overlay"></div>
+            <div class="fmg-preview-content fmg-history-detail-content">
+                <div class="fmg-preview-header">
+                    <h4>📜 历史记录详情</h4>
+                    <button class="fmg-close-btn" id="fmg-history-detail-close">×</button>
+                </div>
+                <div class="fmg-preview-body">
+                    <div class="fmg-history-detail-meta">
+                        <span class="fmg-history-detail-char">🎭 ${escapeHtml(record.charName || '未知角色')}</span>
+                        <span class="fmg-history-detail-time">🕐 ${escapeHtml(record.timestamp || '')}</span>
+                    </div>
+                    <div class="fmg-history-detail-section">
+                        <div class="fmg-history-detail-label">📝 开场白需求</div>
+                        <div class="fmg-history-detail-text fmg-history-prompt-text">${escapeHtml(record.prompt || '')}</div>
+                    </div>
+                    <div class="fmg-history-detail-section">
+                        <div class="fmg-history-detail-label">✨ 生成的开场白</div>
+                        <div class="fmg-history-detail-text fmg-history-content-text">${escapeHtml(record.content || '')}</div>
+                    </div>
+                </div>
+                <div class="fmg-preview-footer">
+                    <button class="fmg-btn fmg-btn-danger-small fmg-btn" id="fmg-history-delete" data-index="${index}">🗑️ 删除</button>
+                    <button class="fmg-btn fmg-btn-primary" id="fmg-history-apply" data-index="${index}">✅ 应用到新的开场白</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // 绑定事件
+        document.getElementById('fmg-history-detail-close').onclick = () => modal.remove();
+        modal.querySelector('.fmg-preview-overlay').onclick = () => modal.remove();
+
+        document.getElementById('fmg-history-apply').onclick = () => {
+            applyHistoryToFirstMessage(index);
+            modal.remove();
+        };
+
+        document.getElementById('fmg-history-delete').onclick = () => {
+            deleteHistoryRecord(index);
+            modal.remove();
+        };
+    }
+
+    async function applyHistoryToFirstMessage(index) {
+        const history = settings.firstMessageHistory || [];
+        if (index < 0 || index >= history.length) return;
+
+        const record = history[index];
+        const content = record.content;
+        if (!content) return;
+
+        try {
+            const context = SillyTavern.getContext();
+
+            if (!context.chat || context.chat.length === 0) {
+                showStatus('fmg-status', 'error', '当前没有聊天记录');
+                return;
+            }
+
+            // 更新第0楼消息
+            context.chat[0].mes = content;
+
+            // 更新DOM显示
+            const firstMessage = document.querySelector('#chat .mes:first-child .mes_text');
+            if (firstMessage) {
+                if (typeof context.messageFormatting === 'function') {
+                    firstMessage.innerHTML = context.messageFormatting(content, context.chat[0].name, context.chat[0].is_user, context.chat[0].is_system, 0);
+                } else {
+                    firstMessage.innerHTML = content.replace(/\n/g, '<br>');
+                }
+            }
+
+            // 保存聊天记录
+            if (typeof context.saveChatDebounced === 'function') {
+                context.saveChatDebounced();
+            } else if (typeof context.saveChat === 'function') {
+                await context.saveChat();
+            }
+
+            showStatus('fmg-status', 'success', '历史开场白已应用到第0楼！');
+            closePopup();
+
+            if (typeof toastr !== 'undefined') {
+                toastr.success('历史开场白已应用到第0楼');
+            }
+
+        } catch (e) {
+            console.error('[开场白生成器] 应用历史记录失败:', e);
+            showStatus('fmg-status', 'error', '应用失败: ' + e.message);
+        }
+    }
+
+    function deleteHistoryRecord(index) {
+        const history = settings.firstMessageHistory || [];
+        if (index < 0 || index >= history.length) return;
+
+        history.splice(index, 1);
+        settings.firstMessageHistory = history;
+        saveSettings();
+        renderHistoryList();
+
+        if (typeof toastr !== 'undefined') {
+            toastr.info('历史记录已删除');
+        }
+    }
+
+    function clearAllHistory() {
+        const currentCharName = window._fmgCharData ? window._fmgCharData.name : null;
+        if (!currentCharName) return;
+
+        // 只清除当前角色的记录
+        settings.firstMessageHistory = (settings.firstMessageHistory || []).filter(
+            r => r.charName !== currentCharName
+        );
+        saveSettings();
+        renderHistoryList();
+
+        if (typeof toastr !== 'undefined') {
+            toastr.info(`已清除 ${currentCharName} 的历史记录`);
+        }
     }
 
     // ========================================
