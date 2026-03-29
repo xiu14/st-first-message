@@ -12,6 +12,8 @@ A [SillyTavern](https://github.com/SillyTavern/SillyTavern) extension that uses 
 | GitHub Unique Cloners | **233** |
 | GitHub Total Views | **114** |
 
+> 📊 Detailed traffic report available at [`github-repo-stats` branch](https://github.com/xiu14/st-first-message/tree/github-repo-stats/xiu14/st-first-message/latest-report) (auto-updated daily via GitHub Actions)
+
 ## Features
 
 ### Opening Message Generation
@@ -105,4 +107,3 @@ SillyTavern 扩展插件 - 使用 AI 为角色卡生成精准的开场白，并�
 ## License
 
 MIT
-
