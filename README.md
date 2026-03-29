@@ -4,7 +4,7 @@ A [SillyTavern](https://github.com/SillyTavern/SillyTavern) extension that uses 
 
 ## Community & Adoption
 
-![Discord Community Votes](discord-votes.png)
+<img src="discord-votes.png" alt="Discord Community Votes" width="500">
 
 | Metric | Value |
 |--------|-------|
@@ -105,3 +105,4 @@ SillyTavern 扩展插件 - 使用 AI 为角色卡生成精准的开场白，并�
 ## License
 
 MIT
+
