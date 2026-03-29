@@ -1,0 +1,17 @@
+name: GitHub Repo Stats
+
+on:
+  schedule:
+    # 每天 UTC 23:00（北京时间次日 07:00）运行一次
+    - cron: "0 23 * * *"
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  repo-stats:
+    name: Collect repo traffic stats
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run github-repo-stats
+        uses: jgehrcke/github-repo-stats@v1.4.2
+        with:
+          ghtoken: ${{ secrets.GHRS_GITHUB_API_TOKEN }}
