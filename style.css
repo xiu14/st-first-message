@@ -408,7 +408,8 @@
    预览弹窗
    ======================================== */
 
-#fmg-preview-modal {
+#fmg-preview-modal,
+#fmg-history-detail-modal {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -619,6 +620,79 @@
     border-radius: 4px;
 }
 
+.fmg-template-section {
+    margin-top: 8px;
+}
+
+.fmg-template-grid {
+    display: flex;
+    gap: 10px;
+}
+
+.fmg-template-chip {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(100, 200, 255, 0.16);
+    border-radius: 8px;
+    color: var(--SmartThemeBodyColor, #e8f4ff);
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fmg-template-chip:hover {
+    border-color: rgba(100, 200, 255, 0.35);
+    background: rgba(100, 200, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.fmg-template-chip.fixed,
+.fmg-template-chip-fixed {
+    border-color: rgba(100, 200, 255, 0.28);
+    color: #64c8ff;
+}
+
+.fmg-template-chip.empty {
+    color: #888;
+    border-style: dashed;
+}
+
+.fmg-template-chip.editing {
+    padding: 6px 8px;
+    background: rgba(100, 200, 255, 0.08);
+    border-color: rgba(100, 200, 255, 0.4);
+    cursor: text;
+    transform: none;
+}
+
+.fmg-template-chip-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--SmartThemeBlurTintColor, #151528);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor, #fff);
+    font-size: 12px;
+    outline: none;
+}
+
+.fmg-template-chip-input:focus {
+    border-color: var(--SmartThemeQuoteColor, #7c7cff);
+}
+
+.fmg-template-presets {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
 .fmg-btn-open {
     background: rgba(100, 200, 255, 0.15) !important;
     color: #64c8ff !important;
@@ -629,7 +703,8 @@
 }
 
 /* 选择弹窗 */
-#fmg-selection-modal {
+#fmg-selection-modal,
+#fmg-discuss-history-modal {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -826,4 +901,724 @@
 /* 生成中头部标题 */
 .fmg-preview-header h4 {
     transition: all 0.3s ease;
+}
+
+/* ========================================
+   角色卡讨论页样式
+   ======================================== */
+
+/* 信息面板 */
+.fmg-discuss-info-panel {
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+/* 折叠区块 */
+.fmg-collapse-section {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fmg-collapse-section:last-of-type {
+    border-bottom: none;
+}
+
+.fmg-collapse-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--SmartThemeBodyColor, #ccc);
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.fmg-collapse-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.fmg-collapse-arrow {
+    font-size: 10px;
+    color: #888;
+    transition: transform 0.2s;
+}
+
+.fmg-collapse-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.fmg-collapse-body.open {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.fmg-collapse-content {
+    padding: 6px 12px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #aaa;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+/* 世界书选择栏 */
+.fmg-discuss-wi-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 12px;
+    font-size: 12px;
+    color: var(--SmartThemeBodyColor, #ccc);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fmg-discuss-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(85vh - 140px);
+    max-height: 600px;
+}
+
+.fmg-chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.fmg-chat-header .fmg-btn-group {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.fmg-chat-char-info {
+    font-size: 13px;
+    color: #888;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.fmg-chat-char-info.active {
+    color: #64ffda;
+    background: rgba(100, 255, 218, 0.1);
+}
+
+.fmg-btn-danger-small {
+    background: rgba(255, 100, 100, 0.15) !important;
+    color: #ff8080 !important;
+}
+
+.fmg-btn-danger-small:hover {
+    background: rgba(255, 100, 100, 0.3) !important;
+}
+
+/* 聊天消息区域 */
+.fmg-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 欢迎提示 */
+.fmg-chat-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #888;
+    font-size: 13px;
+    text-align: center;
+    padding: 30px 20px;
+}
+
+.fmg-chat-welcome-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+/* 消息气泡 */
+.fmg-chat-bubble {
+    max-width: 85%;
+    padding: 0;
+    animation: fmg-fadeIn 0.2s ease;
+}
+
+.fmg-chat-bubble.user {
+    align-self: flex-end;
+}
+
+.fmg-chat-bubble.assistant {
+    align-self: flex-start;
+}
+
+.fmg-chat-label {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 3px;
+    padding: 0 4px;
+}
+
+.fmg-chat-bubble.user .fmg-chat-label {
+    text-align: right;
+}
+
+.fmg-chat-text {
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.fmg-chat-bubble.user .fmg-chat-text {
+    background: var(--SmartThemeQuoteColor, rgba(124, 124, 255, 0.25));
+    color: var(--SmartThemeBodyColor, #e8e8ff);
+    border-bottom-right-radius: 4px;
+}
+
+.fmg-chat-bubble.assistant .fmg-chat-text {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--SmartThemeBodyColor, #ddd);
+    border-bottom-left-radius: 4px;
+    border-left: 3px solid #64ffda;
+}
+
+@keyframes fmg-fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 输入区 */
+.fmg-chat-input-area {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.fmg-chat-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--SmartThemeBlurTintColor, #151528);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    color: var(--SmartThemeBodyColor, #fff);
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+    min-height: 38px;
+    max-height: 120px;
+    line-height: 1.4;
+}
+
+.fmg-chat-input:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor, #7c7cff);
+}
+
+.fmg-chat-send {
+    flex-shrink: 0;
+    padding: 10px 18px !important;
+    height: 40px;
+    border-radius: 8px !important;
+}
+
+.fmg-discuss-history-section {
+    margin-bottom: 8px;
+}
+
+.fmg-discuss-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.fmg-discuss-history-empty {
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+}
+
+.fmg-discuss-session-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.fmg-discuss-session-card.active {
+    border-color: rgba(100, 200, 255, 0.3);
+    background: rgba(100, 200, 255, 0.08);
+}
+
+.fmg-discuss-session-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.fmg-discuss-session-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64c8ff;
+}
+
+.fmg-discuss-session-time {
+    font-size: 10px;
+    color: #777;
+    flex-shrink: 0;
+}
+
+.fmg-discuss-session-preview {
+    font-size: 11px;
+    color: var(--SmartThemeBodyColor, #ccc);
+    line-height: 1.5;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fmg-discuss-session-meta {
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.fmg-discuss-session-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* 移动端适配 - 讨论页 */
+@media (max-width: 768px) {
+    .fmg-discuss-container {
+        height: calc(100vh - 180px);
+        max-height: none;
+    }
+
+    .fmg-chat-input {
+        font-size: 16px;
+    }
+
+    .fmg-chat-messages {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fmg-chat-bubble {
+        max-width: 92%;
+    }
+
+    .fmg-chat-header {
+        align-items: flex-start;
+    }
+
+    .fmg-chat-header .fmg-btn-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .fmg-template-grid {
+        flex-direction: column;
+    }
+}
+
+/* ========================================
+   编辑卡片样式
+   ======================================== */
+
+.fmg-chat-plain {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 6px;
+}
+
+.fmg-edit-card {
+    background: rgba(124, 124, 255, 0.06);
+    border: 1px solid rgba(124, 124, 255, 0.25);
+    border-radius: 10px;
+    margin: 8px 0;
+    overflow: hidden;
+    transition: border-color 0.3s, opacity 0.3s;
+}
+
+.fmg-edit-card-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(124, 124, 255, 0.12);
+    font-size: 13px;
+    font-weight: 600;
+    color: #a0a0ff;
+    border-bottom: 1px solid rgba(124, 124, 255, 0.15);
+}
+
+.fmg-edit-card-old {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fmg-edit-card-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #888;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.fmg-edit-card-label:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.fmg-edit-card-label-static {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #64ffda;
+    user-select: none;
+}
+
+.fmg-edit-card-old-content {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #999;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0, 0, 0, 0.15);
+    transition: max-height 0.25s ease, padding 0.25s ease;
+}
+
+.fmg-edit-card-old-content.open {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 12px;
+}
+
+.fmg-edit-card-new-content {
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--SmartThemeBodyColor, #ddd);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 250px;
+    overflow-y: auto;
+    background: rgba(100, 255, 218, 0.04);
+    border-left: 3px solid rgba(100, 255, 218, 0.4);
+}
+
+.fmg-edit-card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.1);
+    justify-content: flex-end;
+}
+
+.fmg-edit-card-actions .fmg-btn {
+    padding: 5px 14px;
+    font-size: 12px;
+}
+
+/* 已应用状态 */
+.fmg-edit-card.applied {
+    border-color: rgba(100, 255, 150, 0.35);
+    background: rgba(100, 255, 150, 0.04);
+}
+
+.fmg-edit-applied-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #64ff96;
+    background: rgba(100, 255, 150, 0.12);
+    border-radius: 4px;
+}
+
+/* 已忽略状态 */
+.fmg-edit-card.ignored {
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.fmg-edit-ignored-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #888;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+}
+
+/* 移动端适配 - 编辑卡片 */
+@media (max-width: 768px) {
+    .fmg-edit-card-new-content {
+        max-height: 180px;
+    }
+
+    .fmg-edit-card-old-content.open {
+        max-height: 150px;
+    }
+}
+
+/* ========================================
+   状态栏页样式
+   ======================================== */
+
+.fmg-sb-container {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    gap: 12px;
+}
+
+.fmg-sb-preview-section {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.fmg-sb-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor, #ccc);
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.fmg-sb-preview-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.fmg-sb-preview-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.fmg-sb-preview-body.open {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.fmg-sb-code {
+    margin: 0;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    color: #a0a0ff;
+    font-size: 11px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.fmg-sb-code-large {
+    color: #64ffda;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.fmg-sb-visual-content {
+    padding: 15px;
+    background: #111;
+    border-radius: 6px;
+    margin: 10px;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+    color: #fff;
+    min-height: 50px;
+    font-size: 14px;
+}
+
+.fmg-sb-regex-field {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fmg-sb-regex-field label {
+    display: block;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #888;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   历史记录区域样式
+   ======================================== */
+
+.fmg-history-section {
+    margin-top: 12px;
+}
+
+.fmg-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.fmg-history-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.fmg-history-card:hover {
+    border-color: rgba(100, 200, 255, 0.25);
+    background: rgba(0, 0, 0, 0.3);
+    transform: translateY(-1px);
+}
+
+.fmg-history-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.fmg-history-char {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64c8ff;
+}
+
+.fmg-history-time {
+    font-size: 10px;
+    color: #666;
+}
+
+.fmg-history-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.fmg-history-prompt-preview {
+    font-size: 11px;
+    color: #64ffda;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fmg-history-content-preview {
+    font-size: 11px;
+    color: #999;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 历史记录详情弹窗 */
+.fmg-history-detail-content {
+    max-width: 600px;
+}
+
+.fmg-history-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.fmg-history-detail-char {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64c8ff;
+}
+
+.fmg-history-detail-time {
+    font-size: 11px;
+    color: #888;
+}
+
+.fmg-history-detail-section {
+    margin-bottom: 10px;
+}
+
+.fmg-history-detail-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64ffda;
+    margin-bottom: 4px;
+    padding: 4px 0;
+}
+
+.fmg-history-detail-text {
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--SmartThemeBodyColor, #ccc);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.fmg-history-prompt-text {
+    border-left: 3px solid rgba(100, 255, 218, 0.4);
+}
+
+.fmg-history-content-text {
+    border-left: 3px solid rgba(124, 124, 255, 0.4);
+    max-height: 300px;
 }
