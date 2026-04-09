@@ -633,9 +633,9 @@
         });
 
         // 讨论页 - 刷新
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', async (e) => {
             if (e.target.id === 'fmg-discuss-refresh') {
-                loadCharacterData();
+                await loadCharacterData();
                 updateDiscussPanel();
             }
         });
@@ -661,9 +661,9 @@
         });
 
         // 世界书页 - 刷新
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', async (e) => {
             if (e.target.id === 'fmg-wb-refresh') {
-                loadCharacterData();
+                await loadCharacterData();
                 updateWorldbookPanel();
             }
         });
@@ -864,7 +864,7 @@
     // 数据加载
     // ========================================
 
-    function loadCharacterData() {
+    async function loadCharacterData() {
         try {
             const context = SillyTavern.getContext();
             console.log('[开场白生成器] context:', context);
@@ -928,7 +928,7 @@
             }
 
             // 加载世界书条目
-            loadWorldInfoList(context);
+            await loadWorldInfoList(context);
 
             // 加载预设条目
             loadPresetPrompts(context);
@@ -1116,7 +1116,7 @@
                 const defaultSelections = [];
                 entries.forEach((entry, idx) => {
                     if (entry.enabled !== false) {
-                        const identifier = entry.name || `wi_${idx}`;
+                        const identifier = getWorldInfoIdentifier(entry, idx);
                         defaultSelections.push(identifier);
                     }
                 });
@@ -1205,6 +1205,38 @@
         return entries;
     }
 
+    function getWorldInfoIdentifier(entry, idx = 0) {
+        const numericUid = Number(entry?.uid);
+        if (Number.isFinite(numericUid)) {
+            return `uid:${numericUid}`;
+        }
+
+        const fallbackName = entry?.comment || entry?.name || entry?.key?.[0] || entry?.keys?.[0] || `wi_${idx}`;
+        return `name:${String(fallbackName)}`;
+    }
+
+    function getLegacyWorldInfoIdentifiers(entry, idx = 0) {
+        const identifiers = new Set();
+        identifiers.add(entry?.name || `wi_${idx}`);
+
+        if (entry?.comment) identifiers.add(entry.comment);
+        if (entry?.name) identifiers.add(entry.name);
+
+        const primaryKey = Array.isArray(entry?.key)
+            ? entry.key[0]
+            : Array.isArray(entry?.keys)
+                ? entry.keys[0]
+                : null;
+        if (primaryKey) identifiers.add(primaryKey);
+
+        return Array.from(identifiers).filter(Boolean);
+    }
+
+    function isWorldInfoEntrySelected(entry, idx, selectedIdentifiers) {
+        const identifiers = [getWorldInfoIdentifier(entry, idx), ...getLegacyWorldInfoIdentifiers(entry, idx)];
+        return identifiers.some(identifier => selectedIdentifiers.includes(identifier));
+    }
+
     function selectAllWorldInfo(select) {
         document.querySelectorAll('.fmg-wi-cb').forEach(cb => {
             cb.checked = select;
@@ -1218,8 +1250,7 @@
 
         // 使用保存的选择
         entries.forEach((entry, idx) => {
-            const identifier = entry.name || `wi_${idx}`;
-            if (savedSelections.includes(identifier)) {
+            if (isWorldInfoEntrySelected(entry, idx, savedSelections)) {
                 selected.push(entry);
             }
         });
@@ -1298,10 +1329,12 @@
                 ? (entry.name || `条目${index + 1}`)
                 : (entry.name || entry.identifier || `条目${index + 1}`);
             const identifier = isWorldInfo
-                ? (entry.name || `wi_${index}`)
+                ? getWorldInfoIdentifier(entry, index)
                 : (entry.identifier || entry.name || `prompt_${index}`);
             const isEnabled = entry.enabled !== false;
-            const isChecked = savedSelections.includes(identifier);
+            const isChecked = isWorldInfo
+                ? isWorldInfoEntrySelected(entry, index, savedSelections)
+                : savedSelections.includes(identifier);
 
             const badges = [];
             if (isWorldInfo) {
@@ -2014,6 +2047,15 @@
         undoBtn.disabled = isWorldbookGenerating || !hasUndoableRound;
     }
 
+    function syncWorldbookSystemPrompt() {
+        const systemPrompt = buildWorldbookSystemPrompt();
+        worldbookMessages = worldbookMessages.filter(msg => msg.role !== 'system');
+
+        if (systemPrompt) {
+            worldbookMessages.unshift({ role: 'system', content: systemPrompt });
+        }
+    }
+
     function buildWorldbookSystemPrompt() {
         const charData = window._fmgCharData;
         if (!charData) return null;
@@ -2353,12 +2395,7 @@ ${editableEntriesText}
         input.value = '';
         appendWorldbookMessage('user', userText);
 
-        if (worldbookMessages.length === 0) {
-            const systemPrompt = buildWorldbookSystemPrompt();
-            if (systemPrompt) {
-                worldbookMessages.push({ role: 'system', content: systemPrompt });
-            }
-        }
+        syncWorldbookSystemPrompt();
 
         worldbookMessages.push({ role: 'user', content: userText });
 
@@ -2540,15 +2577,17 @@ ${editableEntriesText}
             }
 
             const savedSelections = settings.selectedWorldEntries || [];
-            const newIdentifier = entryData.comment || entryData.keys?.[0];
-            if (newIdentifier && !savedSelections.includes(newIdentifier)) {
-                settings.selectedWorldEntries = [...savedSelections, newIdentifier];
+            const persistedIdentifier = getWorldInfoIdentifier(targetEntry, worldEntries.indexOf(targetEntry));
+            const legacyIdentifiers = getLegacyWorldInfoIdentifiers(targetEntry, worldEntries.indexOf(targetEntry));
+            const mergedSelections = [...new Set([...savedSelections, persistedIdentifier, ...legacyIdentifiers])];
+            if (mergedSelections.length !== savedSelections.length) {
+                settings.selectedWorldEntries = mergedSelections;
                 saveSettings();
             }
 
             showStatus('fmg-wb-status', 'success', `已${isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
             if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${isUpdate ? '更新' : '添加'}`);
-            loadWorldInfoList(context, true);
+            await loadWorldInfoList(context, true);
 
         } catch (error) {
             console.error('[开场白生成器] 添加世界书条目失败:', error);
