@@ -1025,7 +1025,25 @@
 }
 
 .fmg-worldbook-container.chat-focused .fmg-chat-header {
-    margin-bottom: 10px;
+    gap: 6px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+}
+
+.fmg-worldbook-container.chat-focused .fmg-chat-char-info {
+    max-width: 120px;
+    padding: 1px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fmg-worldbook-container.chat-focused #fmg-wb-focus-toggle {
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 1.1;
 }
 
 .fmg-worldbook-hint {

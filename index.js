@@ -2168,7 +2168,7 @@
 
         const toggleBtn = document.getElementById('fmg-wb-focus-toggle');
         if (toggleBtn) {
-            toggleBtn.textContent = worldbookFocusMode ? '↕ 展开面板' : '↕ 专注聊天';
+            toggleBtn.textContent = worldbookFocusMode ? '↕ 展开' : '↕ 专注';
             toggleBtn.title = worldbookFocusMode ? '显示世界书页面的其他操作区' : '收起非聊天区域，只保留聊天区';
             toggleBtn.classList.toggle('active', worldbookFocusMode);
         }
