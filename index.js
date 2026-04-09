@@ -1157,10 +1157,15 @@
                 for (const entry of bookEntries) {
                     if (entry.content) {
                         entries.push({
+                            uid: Number.isFinite(Number(entry.uid ?? entry.id)) ? Number(entry.uid ?? entry.id) : null,
                             name: entry.comment || entry.name || entry.keys?.[0] || '未命名',
+                            comment: entry.comment || entry.name || entry.keys?.[0] || '未命名',
+                            key: Array.isArray(entry.keys) ? entry.keys : Array.isArray(entry.key) ? entry.key : [],
+                            keysecondary: Array.isArray(entry.secondary_keys) ? entry.secondary_keys : Array.isArray(entry.keysecondary) ? entry.keysecondary : [],
                             content: entry.content || '',
                             constant: entry.constant || false,
-                            enabled: entry.enabled !== false && entry.disable !== true
+                            enabled: entry.enabled !== false && entry.disable !== true,
+                            position: entry.position || null
                         });
                     }
                 }
@@ -1184,10 +1189,15 @@
         for (const entry of rawEntries) {
             if (entry.content) {
                 entries.push({
+                    uid: Number.isFinite(Number(entry.uid ?? entry.id)) ? Number(entry.uid ?? entry.id) : null,
                     name: entry.comment || entry.name || entry.key?.[0] || entry.keys?.[0] || '未命名',
+                    comment: entry.comment || entry.name || entry.key?.[0] || entry.keys?.[0] || '未命名',
+                    key: Array.isArray(entry.key) ? entry.key : Array.isArray(entry.keys) ? entry.keys : [],
+                    keysecondary: Array.isArray(entry.keysecondary) ? entry.keysecondary : Array.isArray(entry.secondary_keys) ? entry.secondary_keys : [],
                     content: entry.content || '',
                     constant: entry.constant || false,
-                    enabled: entry.enabled !== false && entry.disable !== true
+                    enabled: entry.enabled !== false && entry.disable !== true,
+                    position: entry.position ?? null
                 });
             }
         }
@@ -1215,6 +1225,28 @@
         });
 
         return selected;
+    }
+
+    function formatSelectedWorldInfoForUpdate(entries) {
+        if (!entries || entries.length === 0) {
+            return '（当前没有选中的世界书条目，所以如果要更新旧条目，你需要先在本页选择条目后再让 AI 更新）';
+        }
+
+        return entries.map((entry, index) => {
+            const title = entry.comment || entry.name || `条目${index + 1}`;
+            const uidText = entry.uid !== null && entry.uid !== undefined ? String(entry.uid) : '无可用UID';
+            const keysText = Array.isArray(entry.key) && entry.key.length > 0 ? entry.key.join(', ') : '（无）';
+            const secondaryText = Array.isArray(entry.keysecondary) && entry.keysecondary.length > 0 ? entry.keysecondary.join(', ') : '（无）';
+            const contentPreview = String(entry.content || '').trim() || '（空）';
+
+            return [
+                `### ${title}`,
+                `UID: ${uidText}`,
+                `主关键词: ${keysText}`,
+                `次关键词: ${secondaryText}`,
+                `内容: ${contentPreview}`
+            ].join('\n');
+        }).join('\n\n');
     }
 
     function updateCounts() {
@@ -1990,6 +2022,7 @@
         const worldInfoText = worldInfo.length > 0
             ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
             : '（未选择任何世界书条目）';
+        const editableEntriesText = formatSelectedWorldInfoForUpdate(worldInfo);
 
         return `你是一个专业的 SillyTavern 世界书（Lorebook）设计助手。
 
@@ -2000,6 +2033,9 @@ ${getSelectedCharacterInfoText()}
 
 【已选择的世界书上下文】
 ${worldInfoText}
+
+【当前已选条目清单（更新已有条目时优先使用这些 UID）】
+${editableEntriesText}
 
 【工作方式】
 1. 如果用户在讨论设定、拆分信息结构、询问条目设计建议，请直接自然回答。
@@ -2023,7 +2059,9 @@ ${worldInfoText}
 6. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
 7. "position" 只能写 "before_char" 或 "after_char"。
 8. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-9. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
+9. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写对应 uid，不要反问用户去查 uid。
+10. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
+11. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
     }
 
     function normalizeStringArray(value) {
