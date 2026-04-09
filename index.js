@@ -325,6 +325,7 @@
                                 <button class="fmg-btn-small" id="fmg-wb-refresh" title="刷新角色数据">🔄 刷新</button>
                                 <button class="fmg-btn-small" id="fmg-wb-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-wb-clear" title="清空对话">🗑️ 清空</button>
+                                <span class="fmg-token-badge" id="fmg-wb-token-total" title="估算当前世界书会话发送内容的总 token">总Token --</span>
                             </div>
                         </div>
 
@@ -635,6 +636,7 @@
             if (e.target.id === 'fmg-inc-first' || e.target.id === 'fmg-wb-inc-first') settings.includeCurrentFirstMes = e.target.checked;
             syncCharacterIncludeControls();
             saveSettings();
+            requestWorldbookTokenCountUpdate();
         });
 
         // 讨论页 - 发送
@@ -727,6 +729,12 @@
             if (e.target.id === 'fmg-wb-input' && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendWorldbookMessage();
+            }
+        });
+
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'fmg-wb-input') {
+                requestWorldbookTokenCountUpdate(120);
             }
         });
 
@@ -1531,6 +1539,7 @@
             saveSettings();
             updateCounts();
             modal.remove();
+            if (isWorldInfo) requestWorldbookTokenCountUpdate();
 
             console.log(`[开场白生成器] 已保存${isWorldInfo ? '世界书' : '预设'}选择:`, selectedIdentifiers);
         };
@@ -1665,6 +1674,8 @@
     let discussAutoScroll = true;
     let worldbookMessages = [];
     let worldbookFocusMode = false;
+    let worldbookTokenUpdateTimer = null;
+    let worldbookTokenUpdateVersion = 0;
     let worldbookAbortController = null;
     let isWorldbookGenerating = false;
     let worldbookAutoScroll = true;
@@ -2119,6 +2130,7 @@
         updateWorldbookWiCount();
         updateWorldbookUndoButton();
         setWorldbookFocusMode(worldbookFocusMode);
+        requestWorldbookTokenCountUpdate();
     }
 
     function updateWorldbookWiCount() {
@@ -2148,6 +2160,7 @@
         worldbookAutoScroll = true;
         container.scrollTop = container.scrollHeight;
         updateWorldbookUndoButton();
+        requestWorldbookTokenCountUpdate();
     }
 
     function updateWorldbookUndoButton() {
@@ -2171,6 +2184,56 @@
             toggleBtn.textContent = worldbookFocusMode ? '↕ 展开' : '↕ 专注';
             toggleBtn.title = worldbookFocusMode ? '显示世界书页面的其他操作区' : '收起非聊天区域，只保留聊天区';
             toggleBtn.classList.toggle('active', worldbookFocusMode);
+        }
+    }
+
+    function requestWorldbookTokenCountUpdate(delay = 0) {
+        if (worldbookTokenUpdateTimer) {
+            clearTimeout(worldbookTokenUpdateTimer);
+        }
+
+        worldbookTokenUpdateTimer = setTimeout(() => {
+            worldbookTokenUpdateTimer = null;
+            updateWorldbookTokenCount();
+        }, Math.max(0, delay));
+    }
+
+    async function updateWorldbookTokenCount() {
+        const counterEl = document.getElementById('fmg-wb-token-total');
+        if (!counterEl) return;
+
+        const version = ++worldbookTokenUpdateVersion;
+        counterEl.textContent = '总Token ...';
+
+        try {
+            const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+            if (!context || typeof context.getTokenCountAsync !== 'function') {
+                counterEl.textContent = '总Token --';
+                return;
+            }
+
+            const chunks = [];
+            const systemPrompt = buildWorldbookSystemPrompt();
+            if (systemPrompt) chunks.push(systemPrompt);
+
+            worldbookMessages
+                .filter(msg => msg.role !== 'system' && String(msg.content || '').trim())
+                .forEach(msg => chunks.push(String(msg.content)));
+
+            const inputEl = document.getElementById('fmg-wb-input');
+            const draftText = inputEl && typeof inputEl.value === 'string' ? inputEl.value.trim() : '';
+            if (draftText) chunks.push(draftText);
+
+            const counts = await Promise.all(chunks.map(chunk => context.getTokenCountAsync(String(chunk), 0)));
+            if (version !== worldbookTokenUpdateVersion) return;
+
+            const total = counts.reduce((sum, count) => sum + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
+            counterEl.textContent = `总Token ${total}`;
+        } catch (error) {
+            console.warn('[开场白生成器] 统计世界书 token 失败:', error);
+            if (version === worldbookTokenUpdateVersion) {
+                counterEl.textContent = '总Token --';
+            }
         }
     }
 
@@ -2701,6 +2764,7 @@ ${editableEntriesText}
         syncWorldbookSystemPrompt();
 
         worldbookMessages.push({ role: 'user', content: userText });
+        requestWorldbookTokenCountUpdate();
 
         isWorldbookGenerating = true;
         const sendBtn = document.getElementById('fmg-wb-send');
@@ -2721,6 +2785,7 @@ ${editableEntriesText}
                 (finalContent) => {
                     appendWorldbookMessage('assistant', finalContent, false);
                     worldbookMessages.push({ role: 'assistant', content: finalContent });
+                    requestWorldbookTokenCountUpdate();
                     finishWorldbookGeneration();
                 },
                 (error) => {
@@ -2752,6 +2817,7 @@ ${editableEntriesText}
                 const partialContent = textEl.textContent;
                 textEl.innerHTML = renderWorldbookAssistantContent(partialContent);
                 worldbookMessages.push({ role: 'assistant', content: partialContent });
+                requestWorldbookTokenCountUpdate();
             }
         }
 
@@ -2907,6 +2973,7 @@ ${editableEntriesText}
             showStatus('fmg-wb-status', 'success', `已${isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
             if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${isUpdate ? '更新' : '添加'}`);
             await loadWorldInfoList(context, true);
+            requestWorldbookTokenCountUpdate();
 
         } catch (error) {
             console.error('[开场白生成器] 添加世界书条目失败:', error);

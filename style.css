@@ -234,6 +234,19 @@
     border-color: rgba(100, 200, 255, 0.28);
 }
 
+.fmg-token-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(100, 200, 255, 0.1);
+    border: 1px solid rgba(100, 200, 255, 0.18);
+    color: #8dc3ff;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 /* 世界书列表 */
 .fmg-wi-list {
     max-height: 100px;
@@ -1020,7 +1033,7 @@
     display: none;
 }
 
-.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle) {
+.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle):not(#fmg-wb-token-total) {
     display: none;
 }
 
@@ -1044,6 +1057,11 @@
     padding: 2px 6px;
     font-size: 10px;
     line-height: 1.1;
+}
+
+.fmg-worldbook-container.chat-focused #fmg-wb-token-total {
+    padding: 2px 6px;
+    font-size: 10px;
 }
 
 .fmg-worldbook-hint {
