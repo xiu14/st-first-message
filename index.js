@@ -321,12 +321,14 @@
                         <div class="fmg-chat-header">
                             <span class="fmg-chat-char-info" id="fmg-wb-char-name">未选择角色</span>
                             <div class="fmg-btn-group">
+                                <button class="fmg-btn-small" id="fmg-wb-focus-toggle" title="切换聊天专注模式">↕ 专注聊天</button>
                                 <button class="fmg-btn-small" id="fmg-wb-refresh" title="刷新角色数据">🔄 刷新</button>
                                 <button class="fmg-btn-small" id="fmg-wb-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-wb-clear" title="清空对话">🗑️ 清空</button>
                             </div>
                         </div>
 
+                        <div class="fmg-worldbook-focus-hidden">
                         <div class="fmg-section">
                             <div class="fmg-section-header">
                                 <h4>👤 角色参考信息</h4>
@@ -352,6 +354,7 @@
                                     <button class="fmg-btn-small fmg-btn-open" id="fmg-wb-wi-open">选择条目</button>
                                 </div>
                             </div>
+                        </div>
                         </div>
 
                         <div class="fmg-chat-messages" id="fmg-wb-chat-messages">
@@ -682,6 +685,13 @@
             if (e.target.id === 'fmg-wb-refresh') {
                 await loadCharacterData();
                 updateWorldbookPanel();
+            }
+        });
+
+        // 世界书页 - 聊天专注模式
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-wb-focus-toggle') {
+                setWorldbookFocusMode(!worldbookFocusMode);
             }
         });
 
@@ -1654,6 +1664,7 @@
     let isDiscussGenerating = false;
     let discussAutoScroll = true;
     let worldbookMessages = [];
+    let worldbookFocusMode = false;
     let worldbookAbortController = null;
     let isWorldbookGenerating = false;
     let worldbookAutoScroll = true;
@@ -2107,6 +2118,7 @@
 
         updateWorldbookWiCount();
         updateWorldbookUndoButton();
+        setWorldbookFocusMode(worldbookFocusMode);
     }
 
     function updateWorldbookWiCount() {
@@ -2144,6 +2156,22 @@
 
         const hasUndoableRound = worldbookMessages.some(msg => msg.role === 'user');
         undoBtn.disabled = isWorldbookGenerating || !hasUndoableRound;
+    }
+
+    function setWorldbookFocusMode(enabled) {
+        worldbookFocusMode = enabled === true;
+
+        const container = document.querySelector('.fmg-worldbook-container');
+        if (container) {
+            container.classList.toggle('chat-focused', worldbookFocusMode);
+        }
+
+        const toggleBtn = document.getElementById('fmg-wb-focus-toggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = worldbookFocusMode ? '↕ 展开面板' : '↕ 专注聊天';
+            toggleBtn.title = worldbookFocusMode ? '显示世界书页面的其他操作区' : '收起非聊天区域，只保留聊天区';
+            toggleBtn.classList.toggle('active', worldbookFocusMode);
+        }
     }
 
     function syncWorldbookSystemPrompt() {

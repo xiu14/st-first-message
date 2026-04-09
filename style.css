@@ -80,12 +80,17 @@
 
 .fmg-tab {
     flex: 1;
-    padding: 10px 16px;
+    min-width: 0;
+    padding: 10px 8px;
     background: none;
     border: none;
     color: var(--SmartThemeBodyColor, #888);
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     transition: all 0.2s;
     border-bottom: 2px solid transparent;
 }
@@ -221,6 +226,12 @@
 .fmg-btn-small:hover {
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
+}
+
+.fmg-btn-small.active {
+    background: rgba(100, 200, 255, 0.18);
+    color: #8dc3ff;
+    border-color: rgba(100, 200, 255, 0.28);
 }
 
 /* 世界书列表 */
@@ -531,6 +542,11 @@
     .fmg-content {
         flex: 1;
         -webkit-overflow-scrolling: touch;
+    }
+
+    .fmg-tab {
+        padding: 10px 4px;
+        font-size: 12px;
     }
 
     .fmg-textarea {
@@ -993,6 +1009,23 @@
     flex-direction: column;
     height: calc(85vh - 140px);
     max-height: 600px;
+}
+
+.fmg-worldbook-focus-hidden {
+    display: contents;
+}
+
+.fmg-worldbook-container.chat-focused .fmg-worldbook-focus-hidden,
+.fmg-worldbook-container.chat-focused #fmg-wb-status {
+    display: none;
+}
+
+.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle) {
+    display: none;
+}
+
+.fmg-worldbook-container.chat-focused .fmg-chat-header {
+    margin-bottom: 10px;
 }
 
 .fmg-worldbook-hint {
