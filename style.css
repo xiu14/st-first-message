@@ -988,6 +988,19 @@
     max-height: 600px;
 }
 
+.fmg-worldbook-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(85vh - 140px);
+    max-height: 600px;
+}
+
+.fmg-worldbook-hint {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #888;
+}
+
 .fmg-chat-header {
     display: flex;
     justify-content: space-between;
@@ -1232,6 +1245,11 @@
         max-height: none;
     }
 
+    .fmg-worldbook-container {
+        height: calc(100vh - 180px);
+        max-height: none;
+    }
+
     .fmg-chat-input {
         font-size: 16px;
     }
@@ -1395,6 +1413,69 @@
     border-radius: 4px;
 }
 
+/* ========================================
+   世界书条目卡片
+   ======================================== */
+
+.fmg-worldbook-card {
+    background: rgba(100, 200, 255, 0.05);
+    border: 1px solid rgba(100, 200, 255, 0.22);
+    border-radius: 10px;
+    margin: 8px 0;
+    overflow: hidden;
+    transition: border-color 0.3s, opacity 0.3s, background 0.3s;
+}
+
+.fmg-worldbook-card.applied {
+    border-color: rgba(100, 255, 150, 0.35);
+    background: rgba(100, 255, 150, 0.04);
+}
+
+.fmg-worldbook-card.invalid {
+    border-color: rgba(255, 100, 100, 0.28);
+    background: rgba(255, 100, 100, 0.04);
+}
+
+.fmg-worldbook-card.ignored {
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.fmg-worldbook-card-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(100, 200, 255, 0.12);
+    font-size: 13px;
+    font-weight: 600;
+    color: #64c8ff;
+    border-bottom: 1px solid rgba(100, 200, 255, 0.18);
+}
+
+.fmg-worldbook-meta {
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.12);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fmg-worldbook-meta-row {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--SmartThemeBodyColor, #ddd);
+}
+
+.fmg-worldbook-meta-label {
+    color: #8fbad6;
+    flex-shrink: 0;
+}
+
 /* 移动端适配 - 编辑卡片 */
 @media (max-width: 768px) {
     .fmg-edit-card-new-content {
@@ -1403,6 +1484,10 @@
 
     .fmg-edit-card-old-content.open {
         max-height: 150px;
+    }
+
+    .fmg-worldbook-meta-row {
+        grid-template-columns: 64px 1fr;
     }
 }
 
