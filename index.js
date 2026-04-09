@@ -995,6 +995,61 @@
         }
     }
 
+    function buildOriginalWorldInfoEntry(entry, uid, displayIndex = 0) {
+        const numericPosition = Number(entry.position ?? 0);
+        const stringPosition = numericPosition === 1 ? 'after_char' : 'before_char';
+
+        return {
+            id: uid,
+            keys: Array.isArray(entry.keys) ? entry.keys : [],
+            secondary_keys: Array.isArray(entry.secondary_keys) ? entry.secondary_keys : [],
+            comment: entry.comment || '',
+            content: entry.content || '',
+            constant: entry.constant === true,
+            selective: entry.constant === true ? false : entry.selective !== false,
+            insertion_order: entry.insertion_order ?? 100,
+            enabled: entry.enabled !== false,
+            position: stringPosition,
+            use_regex: true,
+            extensions: {
+                position: numericPosition,
+                exclude_recursion: false,
+                display_index: displayIndex,
+                probability: 100,
+                useProbability: true,
+                depth: entry.depth ?? (numericPosition === 4 ? 0 : 4),
+                selectiveLogic: 0,
+                group: '',
+                group_override: false,
+                group_weight: 100,
+                prevent_recursion: false,
+                delay_until_recursion: false,
+                scan_depth: null,
+                match_whole_words: false,
+                use_group_scoring: false,
+                case_sensitive: null,
+                automation_id: '',
+                role: 0,
+                vectorized: false,
+                sticky: 0,
+                cooldown: 0,
+                delay: 0
+            }
+        };
+    }
+
+    function appendOriginalWorldInfoEntry(worldData, entry, uid) {
+        if (!worldData.originalData || typeof worldData.originalData !== 'object') {
+            worldData.originalData = { entries: [] };
+        }
+        if (!Array.isArray(worldData.originalData.entries)) {
+            worldData.originalData.entries = [];
+        }
+
+        const displayIndex = worldData.originalData.entries.length;
+        worldData.originalData.entries.push(buildOriginalWorldInfoEntry(entry, uid, displayIndex));
+    }
+
     async function loadWorldInfoList(context, forceRefresh = true) {
         window._fmgWorldEntries = [];
 
@@ -2358,7 +2413,7 @@ ${worldInfoText}
             const numericIds = Object.keys(entries).map(Number).filter(Number.isFinite);
             const newId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 0;
 
-            entries[newId] = {
+            const newEntry = {
                 uid: newId,
                 key: entryData.keys || [],
                 keysecondary: entryData.secondary_keys || [],
@@ -2392,6 +2447,20 @@ ${worldInfoText}
                 cooldown: null,
                 delay: null
             };
+
+            entries[newId] = newEntry;
+            appendOriginalWorldInfoEntry(worldData, {
+                keys: newEntry.key,
+                secondary_keys: newEntry.keysecondary,
+                comment: newEntry.comment,
+                content: newEntry.content,
+                constant: newEntry.constant,
+                selective: newEntry.selective,
+                insertion_order: newEntry.order,
+                position: newEntry.position,
+                enabled: newEntry.enabled,
+                depth: newEntry.depth
+            }, newId);
 
             worldData.entries = entries;
 
@@ -2660,7 +2729,7 @@ ${worldInfoText}
             const newId = Object.keys(entries).length > 0
                 ? Math.max(...Object.keys(entries).map(Number)) + 1 : 0;
 
-            entries[newId] = {
+            const newEntry = {
                 uid: newId,
                 key: ['状态栏'],
                 keysecondary: [],
@@ -2691,6 +2760,20 @@ ${worldInfoText}
                 cooldown: null,
                 delay: null
             };
+
+            entries[newId] = newEntry;
+            appendOriginalWorldInfoEntry(worldData, {
+                keys: newEntry.key,
+                secondary_keys: newEntry.keysecondary,
+                comment: newEntry.comment,
+                content: newEntry.content,
+                constant: newEntry.constant,
+                selective: newEntry.selective,
+                insertion_order: newEntry.order,
+                position: newEntry.position,
+                enabled: newEntry.enabled,
+                depth: newEntry.depth
+            }, newId);
 
             worldData.entries = entries;
 
