@@ -804,6 +804,39 @@
             }
         });
 
+        // 世界书卡片 - 蓝灯/绿灯状态
+        document.addEventListener('change', (e) => {
+            const stateInput = e.target.closest('.fmg-worldbook-state-input');
+            if (!stateInput) return;
+
+            const key = stateInput.dataset.entryKey;
+            const entryData = window._fmgPendingWorldbookEntries?.[key];
+            if (!entryData) return;
+
+            const nextState = stateInput.dataset.state;
+            const card = stateInput.closest('.fmg-worldbook-card');
+            if (nextState === 'constant') {
+                entryData.constant = true;
+                entryData.vectorized = false;
+                entryData.selective = false;
+            } else {
+                entryData.constant = false;
+                entryData.vectorized = false;
+                entryData.selective = entryData.selective !== false ? true : entryData.selective;
+            }
+
+            if (card) {
+                card.querySelectorAll('.fmg-worldbook-state-input').forEach(input => {
+                    input.checked = input === stateInput;
+                });
+
+                const triggerEl = card.querySelector('.fmg-worldbook-trigger-value');
+                if (triggerEl) {
+                    triggerEl.textContent = entryData.constant ? '常驻条目' : '关键词触发';
+                }
+            }
+        });
+
         // 世界书卡片 - 手动调整顺序
         document.addEventListener('input', (e) => {
             const orderInput = e.target.closest('.fmg-worldbook-order-input');
@@ -2411,7 +2444,7 @@ ${editableEntriesText}
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">操作类型</span><span>${escapeHtml(modeLabel)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">主关键词</span><span>${escapeHtml(keysText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">次关键词</span><span>${escapeHtml(secondaryText)}</span></div>
-                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">触发方式</span><span>${escapeHtml(triggerMode)}</span></div>
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">触发方式</span><span class="fmg-worldbook-trigger-value">${escapeHtml(triggerMode)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">注入位置</span><span class="fmg-worldbook-position-value">${escapeHtml(getWorldbookPositionLabel(currentPosition, currentRole, entry.outlet_name))}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">插入顺序</span><span class="fmg-worldbook-order-value">${escapeHtml(String(currentOrder))}</span></div>
                     ${positionDetail ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">位置细节</span><span>${escapeHtml(positionDetail)}</span></div>` : ''}
@@ -2422,6 +2455,19 @@ ${editableEntriesText}
                     <div class="fmg-edit-card-new-content">${escapeHtml(entry.content)}</div>
                 </div>
                 <div class="fmg-worldbook-controls">
+                    <div class="fmg-worldbook-control-row">
+                        <span class="fmg-worldbook-control-label">状态</span>
+                        <div class="fmg-worldbook-state-group">
+                            <label class="fmg-worldbook-state-chip blue">
+                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="constant" ${entry.constant ? 'checked' : ''}>
+                                <span>蓝灯</span>
+                            </label>
+                            <label class="fmg-worldbook-state-chip green">
+                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="normal" ${entry.constant ? '' : 'checked'}>
+                                <span>绿灯</span>
+                            </label>
+                        </div>
+                    </div>
                     <div class="fmg-worldbook-control-row">
                         <label class="fmg-worldbook-control-label" for="fmg-worldbook-position-${escapeHtml(entryKey)}">位置</label>
                         <select class="fmg-worldbook-select fmg-worldbook-position-select" id="fmg-worldbook-position-${escapeHtml(entryKey)}" data-entry-key="${entryKey}">
@@ -2467,6 +2513,7 @@ ${editableEntriesText}
                     secondary_keys: entry.secondary_keys,
                     content: entry.content,
                     constant: entry.constant,
+                    vectorized: false,
                     selective: entry.selective,
                     position: entry.position,
                     depth: entry.depth,
@@ -2784,6 +2831,7 @@ ${editableEntriesText}
                 comment: entryData.comment || '',
                 content: entryData.content || '',
                 constant: entryData.constant === true,
+                vectorized: entryData.vectorized === true,
                 selective: entryData.constant === true ? false : entryData.selective !== false,
                 order: entryData.insertion_order ?? targetEntry.order ?? 100,
                 position: resolvedPosition,

@@ -1496,6 +1496,41 @@
     color: #8fbad6;
 }
 
+.fmg-worldbook-state-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.fmg-worldbook-state-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.fmg-worldbook-state-chip input {
+    margin: 0;
+}
+
+.fmg-worldbook-state-chip.blue {
+    border-color: rgba(100, 170, 255, 0.28);
+    background: rgba(100, 170, 255, 0.08);
+    color: #8dc3ff;
+}
+
+.fmg-worldbook-state-chip.green {
+    border-color: rgba(110, 220, 140, 0.28);
+    background: rgba(110, 220, 140, 0.08);
+    color: #8ee2a5;
+}
+
 .fmg-worldbook-select,
 .fmg-worldbook-input {
     width: 100%;
