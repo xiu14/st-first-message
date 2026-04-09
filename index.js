@@ -72,6 +72,8 @@
         assistant: 2
     };
 
+    const WORLDBOOK_ORDER_PRESETS = [0, 25, 50, 75, 100, 150, 200, 300, 500, 800, 1000];
+
     // ========================================
     // 初始化
     // ========================================
@@ -771,6 +773,49 @@
                     const actionsEl = card.querySelector('.fmg-edit-card-actions');
                     if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
                 }
+            }
+        });
+
+        // 世界书卡片 - 手动调整位置
+        document.addEventListener('change', (e) => {
+            const positionSelect = e.target.closest('.fmg-worldbook-position-select');
+            if (!positionSelect) return;
+
+            const key = positionSelect.dataset.entryKey;
+            const entryData = window._fmgPendingWorldbookEntries?.[key];
+            if (!entryData) return;
+
+            const nextPosition = normalizeWorldbookPosition(positionSelect.value);
+            entryData.position = nextPosition;
+
+            if (nextPosition === WORLDBOOK_POSITIONS.atDepth) {
+                entryData.depth = Number.isFinite(Number(entryData.depth)) ? Number(entryData.depth) : 4;
+                entryData.role = Number.isFinite(Number(entryData.role)) ? Number(entryData.role) : WORLDBOOK_DEPTH_ROLES.system;
+            }
+
+            const card = positionSelect.closest('.fmg-worldbook-card');
+            const valueEl = card?.querySelector('.fmg-worldbook-position-value');
+            if (valueEl) {
+                valueEl.textContent = getWorldbookPositionLabel(nextPosition);
+            }
+        });
+
+        // 世界书卡片 - 手动调整顺序
+        document.addEventListener('change', (e) => {
+            const orderSelect = e.target.closest('.fmg-worldbook-order-select');
+            if (!orderSelect) return;
+
+            const key = orderSelect.dataset.entryKey;
+            const entryData = window._fmgPendingWorldbookEntries?.[key];
+            if (!entryData) return;
+
+            const nextOrder = Number.isFinite(Number(orderSelect.value)) ? Number(orderSelect.value) : 100;
+            entryData.insertion_order = nextOrder;
+
+            const card = orderSelect.closest('.fmg-worldbook-card');
+            const valueEl = card?.querySelector('.fmg-worldbook-order-value');
+            if (valueEl) {
+                valueEl.textContent = String(nextOrder);
             }
         });
 
@@ -2245,6 +2290,41 @@ ${editableEntriesText}
         }
     }
 
+    function getWorldbookPositionOptions(entry) {
+        const options = [
+            { value: WORLDBOOK_POSITIONS.before, label: '角色卡前' },
+            { value: WORLDBOOK_POSITIONS.after, label: '角色卡后' },
+            { value: WORLDBOOK_POSITIONS.authorNoteBefore, label: '作者注前' },
+            { value: WORLDBOOK_POSITIONS.authorNoteAfter, label: '作者注后' },
+            { value: WORLDBOOK_POSITIONS.atDepth, label: 'Depth 注入' },
+            { value: WORLDBOOK_POSITIONS.exampleBefore, label: '示例对话前' },
+            { value: WORLDBOOK_POSITIONS.exampleAfter, label: '示例对话后' }
+        ];
+
+        if (entry?.outlet_name) {
+            options.push({ value: WORLDBOOK_POSITIONS.outlet, label: `Outlet (${entry.outlet_name})` });
+        }
+
+        return options;
+    }
+
+    function renderWorldbookSelectOptions(options, currentValue) {
+        return options.map(option => {
+            const isSelected = Number(option.value) === Number(currentValue);
+            return `<option value="${escapeHtml(String(option.value))}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.label)}</option>`;
+        }).join('');
+    }
+
+    function getWorldbookOrderOptions(currentOrder) {
+        const normalizedCurrent = Number.isFinite(Number(currentOrder)) ? Number(currentOrder) : 100;
+        const values = new Set(WORLDBOOK_ORDER_PRESETS);
+        values.add(normalizedCurrent);
+
+        return Array.from(values)
+            .sort((a, b) => a - b)
+            .map(value => ({ value, label: String(value) }));
+    }
+
     function parseWorldbookEntryBlocks(text) {
         const regex = /\[(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]([\s\S]*?)\[\/(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]/g;
         const entries = [];
@@ -2322,6 +2402,10 @@ ${editableEntriesText}
             : Number(entry.position) === WORLDBOOK_POSITIONS.outlet
                 ? (entry.outlet_name || '未指定')
                 : '';
+        const currentPosition = entry.position ?? WORLDBOOK_POSITIONS.before;
+        const currentOrder = Number.isFinite(Number(entry.insertion_order)) ? Number(entry.insertion_order) : 100;
+        const positionOptionsHtml = renderWorldbookSelectOptions(getWorldbookPositionOptions(entry), currentPosition);
+        const orderOptionsHtml = renderWorldbookSelectOptions(getWorldbookOrderOptions(currentOrder), currentOrder);
 
         return `
             <div class="fmg-worldbook-card" data-entry-key="${entryKey}">
@@ -2331,13 +2415,28 @@ ${editableEntriesText}
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">主关键词</span><span>${escapeHtml(keysText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">次关键词</span><span>${escapeHtml(secondaryText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">触发方式</span><span>${escapeHtml(triggerMode)}</span></div>
-                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">注入位置</span><span>${escapeHtml(getWorldbookPositionLabel(entry.position))}</span></div>
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">注入位置</span><span class="fmg-worldbook-position-value">${escapeHtml(getWorldbookPositionLabel(currentPosition))}</span></div>
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">插入顺序</span><span class="fmg-worldbook-order-value">${escapeHtml(String(currentOrder))}</span></div>
                     ${positionDetail ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">位置细节</span><span>${escapeHtml(positionDetail)}</span></div>` : ''}
                     ${entry.placement_reason ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">放置理由</span><span>${escapeHtml(entry.placement_reason)}</span></div>` : ''}
                 </div>
                 <div class="fmg-edit-card-new">
                     <div class="fmg-edit-card-label-static">📝 条目内容</div>
                     <div class="fmg-edit-card-new-content">${escapeHtml(entry.content)}</div>
+                </div>
+                <div class="fmg-worldbook-controls">
+                    <div class="fmg-worldbook-control-row">
+                        <label class="fmg-worldbook-control-label" for="fmg-worldbook-position-${escapeHtml(entryKey)}">位置</label>
+                        <select class="fmg-worldbook-select fmg-worldbook-position-select" id="fmg-worldbook-position-${escapeHtml(entryKey)}" data-entry-key="${entryKey}">
+                            ${positionOptionsHtml}
+                        </select>
+                    </div>
+                    <div class="fmg-worldbook-control-row">
+                        <label class="fmg-worldbook-control-label" for="fmg-worldbook-order-${escapeHtml(entryKey)}">顺序</label>
+                        <select class="fmg-worldbook-select fmg-worldbook-order-select" id="fmg-worldbook-order-${escapeHtml(entryKey)}" data-entry-key="${entryKey}">
+                            ${orderOptionsHtml}
+                        </select>
+                    </div>
                 </div>
                 <div class="fmg-edit-card-actions">
                     <button class="fmg-btn fmg-btn-primary fmg-worldbook-apply" data-entry-key="${entryKey}">${actionLabel}</button>

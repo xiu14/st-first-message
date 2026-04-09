@@ -1476,6 +1476,43 @@
     flex-shrink: 0;
 }
 
+.fmg-worldbook-controls {
+    display: grid;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(100, 200, 255, 0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.fmg-worldbook-control-row {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.fmg-worldbook-control-label {
+    font-size: 12px;
+    color: #8fbad6;
+}
+
+.fmg-worldbook-select {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(100, 200, 255, 0.22);
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--SmartThemeBodyColor, #ddd);
+    font-size: 12px;
+}
+
+.fmg-worldbook-select:focus {
+    outline: none;
+    border-color: rgba(100, 200, 255, 0.45);
+    box-shadow: 0 0 0 2px rgba(100, 200, 255, 0.12);
+}
+
 /* 移动端适配 - 编辑卡片 */
 @media (max-width: 768px) {
     .fmg-edit-card-new-content {
@@ -1488,6 +1525,10 @@
 
     .fmg-worldbook-meta-row {
         grid-template-columns: 64px 1fr;
+    }
+
+    .fmg-worldbook-control-row {
+        grid-template-columns: 52px minmax(0, 1fr);
     }
 }
 
