@@ -1496,7 +1496,8 @@
     color: #8fbad6;
 }
 
-.fmg-worldbook-select {
+.fmg-worldbook-select,
+.fmg-worldbook-input {
     width: 100%;
     min-width: 0;
     padding: 6px 10px;
@@ -1507,7 +1508,8 @@
     font-size: 12px;
 }
 
-.fmg-worldbook-select:focus {
+.fmg-worldbook-select:focus,
+.fmg-worldbook-input:focus {
     outline: none;
     border-color: rgba(100, 200, 255, 0.45);
     box-shadow: 0 0 0 2px rgba(100, 200, 255, 0.12);
