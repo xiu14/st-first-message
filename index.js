@@ -967,6 +967,34 @@
         return previews.join(' ');
     }
 
+    async function syncWorldInfoDisplay(worldName, worldData) {
+        try {
+            if (!worldName || !worldData) return;
+
+            if (typeof window.worldInfoCache !== 'undefined' && typeof window.worldInfoCache.set === 'function') {
+                window.worldInfoCache.set(worldName, worldData);
+            }
+
+            if (typeof $ !== 'undefined') {
+                const editorSelect = $('#world_editor_select');
+                if (editorSelect.length > 0) {
+                    const selectedText = String(editorSelect.find(':selected').text() || '').trim();
+                    if (selectedText === worldName) {
+                        editorSelect.trigger('change');
+                    }
+                }
+            }
+
+            const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+            const eventType = context?.eventTypes?.WORLDINFO_SETTINGS_UPDATED;
+            if (eventType && context?.eventSource?.emit) {
+                await context.eventSource.emit(eventType);
+            }
+        } catch (error) {
+            console.warn('[开场白生成器] 同步世界书显示失败:', error);
+        }
+    }
+
     async function loadWorldInfoList(context, forceRefresh = true) {
         window._fmgWorldEntries = [];
 
@@ -2392,6 +2420,7 @@ ${worldInfoText}
 
             showStatus('fmg-wb-status', 'success', `已添加到世界书：${entryData.comment || '未命名条目'}`);
             if (typeof toastr !== 'undefined') toastr.success('世界书条目已添加');
+            await syncWorldInfoDisplay(worldName, worldData);
             loadWorldInfoList(context, true);
 
         } catch (error) {
@@ -2675,6 +2704,7 @@ ${worldInfoText}
             showStatus('fmg-sb-status', 'success', '世界书条目已创建！');
             if (typeof toastr !== 'undefined') toastr.success('状态栏世界书条目已添加');
 
+            await syncWorldInfoDisplay(worldName, worldData);
             // 刷新世界书列表
             loadWorldInfoList(context, true);
 
