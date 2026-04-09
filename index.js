@@ -2007,6 +2007,7 @@ ${worldInfoText}
 3. 条目块必须使用下面的精确格式，不要使用 markdown 代码块包裹：
 [WORLDBOOK_ENTRY]
 {
+  "uid": 15,
   "comment": "条目标题或备注",
   "keys": ["主关键词1", "主关键词2"],
   "secondary_keys": ["次级关键词"],
@@ -2017,11 +2018,12 @@ ${worldInfoText}
   "insertion_order": 100
 }
 [/WORLDBOOK_ENTRY]
-4. 如果条目应当常驻，请将 "constant" 设为 true，并将 "keys" 设为空数组。
-5. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
-6. "position" 只能写 "before_char" 或 "after_char"。
-7. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-8. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
+4. 如果是更新已有条目，必须填写 "uid" 为对应条目的 id；如果是新建条目，不要填写 uid。
+5. 如果条目应当常驻，请将 "constant" 设为 true，并将 "keys" 设为空数组。
+6. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
+7. "position" 只能写 "before_char" 或 "after_char"。
+8. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
+9. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
     }
 
     function normalizeStringArray(value) {
@@ -2062,6 +2064,7 @@ ${worldInfoText}
                 }
 
                 entries.push({
+                    uid: Number.isFinite(Number(parsed.uid)) ? Number(parsed.uid) : null,
                     comment: String(parsed.comment || parsed.title || parsed.name || keys[0] || '未命名条目').trim(),
                     keys: keys,
                     secondary_keys: secondaryKeys,
@@ -2109,11 +2112,14 @@ ${worldInfoText}
         const triggerMode = entry.constant ? '常驻条目' : '关键词触发';
         const keysText = entry.keys.length > 0 ? entry.keys.join(', ') : '（无）';
         const secondaryText = entry.secondary_keys.length > 0 ? entry.secondary_keys.join(', ') : '（无）';
+        const modeLabel = entry.uid !== null ? `更新现有条目 #${entry.uid}` : '新增条目';
+        const actionLabel = entry.uid !== null ? '✅ 更新世界书条目' : '✅ 添加到世界书';
 
         return `
             <div class="fmg-worldbook-card" data-entry-key="${entryKey}">
                 <div class="fmg-worldbook-card-header">📚 世界书条目建议：${escapeHtml(entry.comment || '未命名条目')}</div>
                 <div class="fmg-worldbook-meta">
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">操作类型</span><span>${escapeHtml(modeLabel)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">主关键词</span><span>${escapeHtml(keysText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">次关键词</span><span>${escapeHtml(secondaryText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">触发方式</span><span>${escapeHtml(triggerMode)}</span></div>
@@ -2124,7 +2130,7 @@ ${worldInfoText}
                     <div class="fmg-edit-card-new-content">${escapeHtml(entry.content)}</div>
                 </div>
                 <div class="fmg-edit-card-actions">
-                    <button class="fmg-btn fmg-btn-primary fmg-worldbook-apply" data-entry-key="${entryKey}">✅ 添加到世界书</button>
+                    <button class="fmg-btn fmg-btn-primary fmg-worldbook-apply" data-entry-key="${entryKey}">${actionLabel}</button>
                     <button class="fmg-btn fmg-btn-secondary fmg-worldbook-ignore" data-entry-key="${entryKey}">❌ 忽略</button>
                 </div>
             </div>
@@ -2151,6 +2157,7 @@ ${worldInfoText}
             const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
             if (!entry.invalid) {
                 window._fmgPendingWorldbookEntries[entryKey] = {
+                    uid: entry.uid,
                     comment: entry.comment,
                     keys: entry.keys,
                     secondary_keys: entry.secondary_keys,
@@ -2385,6 +2392,59 @@ ${worldInfoText}
         updateWorldbookUndoButton();
     }
 
+    function createWorldbookEntryShell(existingEntries) {
+        const numericIds = existingEntries.map(entry => Number(entry.uid)).filter(Number.isFinite);
+        const newUid = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 0;
+        const lastEntry = existingEntries.length > 0 ? structuredClone(existingEntries[existingEntries.length - 1]) : null;
+
+        if (lastEntry) {
+            lastEntry.uid = newUid;
+            return lastEntry;
+        }
+
+        return {
+            uid: newUid,
+            key: [],
+            keysecondary: [],
+            comment: '',
+            content: '',
+            constant: false,
+            vectorized: false,
+            selective: true,
+            selectiveLogic: 0,
+            addMemo: false,
+            order: 100,
+            position: 0,
+            disable: false,
+            ignoreBudget: false,
+            excludeRecursion: false,
+            preventRecursion: false,
+            matchPersonaDescription: false,
+            matchCharacterDescription: false,
+            matchCharacterPersonality: false,
+            matchCharacterDepthPrompt: false,
+            matchScenario: false,
+            matchCreatorNotes: false,
+            delayUntilRecursion: 0,
+            probability: 100,
+            useProbability: true,
+            depth: 4,
+            outletName: '',
+            group: '',
+            groupOverride: false,
+            groupWeight: 100,
+            scanDepth: null,
+            caseSensitive: null,
+            matchWholeWords: null,
+            useGroupScoring: null,
+            automationId: '',
+            role: 0,
+            sticky: null,
+            cooldown: null,
+            delay: null
+        };
+    }
+
     async function applyWorldbookEntry(entryData, buttonEl) {
         try {
             const context = SillyTavern.getContext();
@@ -2396,87 +2456,48 @@ ${worldInfoText}
             if (!entryData.constant && (!entryData.keys || entryData.keys.length === 0)) {
                 throw new Error('非常驻条目至少需要一个主关键词');
             }
+            if (typeof context.loadWorldInfo !== 'function' || typeof context.saveWorldInfo !== 'function') {
+                throw new Error('当前 ST 上下文缺少世界书保存接口');
+            }
 
-            const headers = typeof context.getRequestHeaders === 'function'
-                ? context.getRequestHeaders()
-                : { 'Content-Type': 'application/json' };
+            const loadedData = await context.loadWorldInfo(worldName);
+            const worldEntries = loadedData?.entries ? Object.values(loadedData.entries) : [];
+            const requestedUid = Number.isFinite(Number(entryData.uid)) ? Number(entryData.uid) : null;
+            let targetEntry = requestedUid !== null
+                ? worldEntries.find(entry => Number(entry.uid) === requestedUid)
+                : null;
+            const isUpdate = !!targetEntry;
 
-            const getResp = await fetch('/api/worldinfo/get', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ name: worldName })
-            });
-            if (!getResp.ok) throw new Error('获取世界书失败');
-            const worldData = await getResp.json();
+            if (!targetEntry) {
+                targetEntry = createWorldbookEntryShell(worldEntries);
+                worldEntries.push(targetEntry);
+            }
 
-            const entries = worldData.entries || {};
-            const numericIds = Object.keys(entries).map(Number).filter(Number.isFinite);
-            const newId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 0;
-
-            const newEntry = {
-                uid: newId,
+            Object.assign(targetEntry, {
                 key: entryData.keys || [],
                 keysecondary: entryData.secondary_keys || [],
                 comment: entryData.comment || '',
-                content: entryData.content,
+                content: entryData.content || '',
                 constant: entryData.constant === true,
                 selective: entryData.constant === true ? false : entryData.selective !== false,
-                selectiveLogic: 0,
-                order: entryData.insertion_order ?? 100,
-                position: entryData.position ?? 0,
+                order: entryData.insertion_order ?? targetEntry.order ?? 100,
+                position: entryData.position ?? targetEntry.position ?? 0,
                 disable: entryData.enabled === false,
-                enabled: entryData.enabled !== false,
-                addMemo: !!entryData.comment,
-                ignoreBudget: false,
-                excludeRecursion: false,
-                preventRecursion: false,
-                delayUntilRecursion: 0,
-                probability: 100,
-                useProbability: true,
-                depth: 4,
-                group: '',
-                groupOverride: false,
-                groupWeight: 100,
-                scanDepth: null,
-                caseSensitive: null,
-                matchWholeWords: null,
-                automationId: '',
-                role: 0,
-                vectorized: false,
-                sticky: null,
-                cooldown: null,
-                delay: null
-            };
-
-            entries[newId] = newEntry;
-            appendOriginalWorldInfoEntry(worldData, {
-                keys: newEntry.key,
-                secondary_keys: newEntry.keysecondary,
-                comment: newEntry.comment,
-                content: newEntry.content,
-                constant: newEntry.constant,
-                selective: newEntry.selective,
-                insertion_order: newEntry.order,
-                position: newEntry.position,
-                enabled: newEntry.enabled,
-                depth: newEntry.depth
-            }, newId);
-
-            worldData.entries = entries;
-
-            const saveResp = await fetch('/api/worldinfo/edit', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ name: worldName, data: worldData })
+                addMemo: !!entryData.comment
             });
-            if (!saveResp.ok) throw new Error(`保存世界书失败: HTTP ${saveResp.status}`);
+
+            const finalFormat = { entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry])) };
+            await context.saveWorldInfo(worldName, finalFormat);
+            if (typeof context.reloadWorldInfoEditor === 'function') {
+                context.reloadWorldInfoEditor(worldName, true);
+            }
 
             if (buttonEl) {
                 const card = buttonEl.closest('.fmg-worldbook-card');
                 if (card) {
                     card.classList.add('applied');
                     const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-applied-badge">✅ 已添加到世界书</span>';
+                    if (actionsEl) actionsEl.innerHTML = `<span class="fmg-edit-applied-badge">✅ 已${isUpdate ? '更新' : '添加'}到世界书</span>`;
                 }
             }
 
@@ -2487,9 +2508,8 @@ ${worldInfoText}
                 saveSettings();
             }
 
-            showStatus('fmg-wb-status', 'success', `已添加到世界书：${entryData.comment || '未命名条目'}`);
-            if (typeof toastr !== 'undefined') toastr.success('世界书条目已添加');
-            await syncWorldInfoDisplay(worldName, worldData);
+            showStatus('fmg-wb-status', 'success', `已${isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
+            if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${isUpdate ? '更新' : '添加'}`);
             loadWorldInfoList(context, true);
 
         } catch (error) {
@@ -2711,26 +2731,15 @@ ${worldInfoText}
             const char = context.characters[context.characterId];
             const worldName = char?.data?.extensions?.world;
             if (!worldName) throw new Error('角色未关联世界书，请先关联一个世界书');
+            if (typeof context.loadWorldInfo !== 'function' || typeof context.saveWorldInfo !== 'function') {
+                throw new Error('当前 ST 上下文缺少世界书保存接口');
+            }
 
-            const headers = typeof context.getRequestHeaders === 'function'
-                ? context.getRequestHeaders()
-                : { 'Content-Type': 'application/json' };
+            const loadedData = await context.loadWorldInfo(worldName);
+            const worldEntries = loadedData?.entries ? Object.values(loadedData.entries) : [];
+            const newEntry = createWorldbookEntryShell(worldEntries);
 
-            // 获取当前世界书数据
-            const getResp = await fetch('/api/worldinfo/get', {
-                method: 'POST', headers,
-                body: JSON.stringify({ name: worldName })
-            });
-            if (!getResp.ok) throw new Error('获取世界书失败');
-            const worldData = await getResp.json();
-
-            // 创建新条目
-            const entries = worldData.entries || {};
-            const newId = Object.keys(entries).length > 0
-                ? Math.max(...Object.keys(entries).map(Number)) + 1 : 0;
-
-            const newEntry = {
-                uid: newId,
+            Object.assign(newEntry, {
                 key: ['状态栏'],
                 keysecondary: [],
                 comment: '状态栏模板',
@@ -2741,53 +2750,19 @@ ${worldInfoText}
                 position: 4,
                 depth: 0,
                 disable: false,
-                enabled: true,
-                excludeRecursion: false,
-                preventRecursion: false,
-                delayUntilRecursion: false,
-                probability: 100,
-                useProbability: true,
-                group: '',
-                groupOverride: false,
-                groupWeight: 100,
-                scanDepth: null,
-                caseSensitive: null,
-                matchWholeWords: null,
-                automationId: '',
-                role: 0,
-                vectorized: false,
-                sticky: null,
-                cooldown: null,
-                delay: null
-            };
-
-            entries[newId] = newEntry;
-            appendOriginalWorldInfoEntry(worldData, {
-                keys: newEntry.key,
-                secondary_keys: newEntry.keysecondary,
-                comment: newEntry.comment,
-                content: newEntry.content,
-                constant: newEntry.constant,
-                selective: newEntry.selective,
-                insertion_order: newEntry.order,
-                position: newEntry.position,
-                enabled: newEntry.enabled,
-                depth: newEntry.depth
-            }, newId);
-
-            worldData.entries = entries;
-
-            // 保存世界书
-            const saveResp = await fetch('/api/worldinfo/edit', {
-                method: 'POST', headers,
-                body: JSON.stringify({ name: worldName, data: worldData })
+                addMemo: true
             });
-            if (!saveResp.ok) throw new Error(`保存世界书失败: HTTP ${saveResp.status}`);
+
+            worldEntries.push(newEntry);
+            const finalFormat = { entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry])) };
+            await context.saveWorldInfo(worldName, finalFormat);
+            if (typeof context.reloadWorldInfoEditor === 'function') {
+                context.reloadWorldInfoEditor(worldName, true);
+            }
 
             showStatus('fmg-sb-status', 'success', '世界书条目已创建！');
             if (typeof toastr !== 'undefined') toastr.success('状态栏世界书条目已添加');
 
-            await syncWorldInfoDisplay(worldName, worldData);
             // 刷新世界书列表
             loadWorldInfoList(context, true);
 
