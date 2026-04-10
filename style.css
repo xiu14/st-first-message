@@ -1037,7 +1037,7 @@
     display: none;
 }
 
-.fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
+.fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-worldbook-toggle):not(#fmg-discuss-worldbook-apply):not(#fmg-discuss-worldbook-cancel):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
     display: none;
 }
 
@@ -1058,6 +1058,9 @@
 }
 
 .fmg-discuss-container.chat-focused #fmg-discuss-focus-toggle,
+.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-toggle,
+.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-apply,
+.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-cancel,
 .fmg-discuss-container.chat-focused #fmg-discuss-undo,
 .fmg-discuss-container.chat-focused #fmg-discuss-clear,
 .fmg-discuss-container.chat-focused #fmg-discuss-token-total {
@@ -1212,6 +1215,30 @@
 
 .fmg-chat-bubble.user .fmg-chat-label {
     text-align: right;
+}
+
+.fmg-chat-assistant-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 4px 6px;
+}
+
+.fmg-chat-assistant-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--SmartThemeBodyColor, #ddd);
+    background: rgba(100, 255, 218, 0.12);
+    border: 1px solid rgba(100, 255, 218, 0.22);
+    cursor: pointer;
+    user-select: none;
+}
+
+.fmg-chat-assistant-pick input {
+    margin: 0;
 }
 
 .fmg-chat-text {
