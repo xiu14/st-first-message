@@ -1037,6 +1037,35 @@
     display: none;
 }
 
+.fmg-discuss-worldbook-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    background: rgba(100, 255, 218, 0.06);
+    border: 1px solid rgba(100, 255, 218, 0.14);
+}
+
+.fmg-discuss-worldbook-toolbar-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fmg-discuss-worldbook-toolbar-label {
+    font-size: 11px;
+    color: #8fd8cd;
+    white-space: nowrap;
+}
+
+.fmg-discuss-worldbook-toolbar .fmg-worldbook-select,
+.fmg-discuss-worldbook-toolbar .fmg-worldbook-input {
+    min-width: 96px;
+}
+
 .fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-worldbook-toggle):not(#fmg-discuss-worldbook-apply):not(#fmg-discuss-worldbook-cancel):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
     display: none;
 }

@@ -274,12 +274,40 @@
                             <div class="fmg-btn-group">
                                 <button class="fmg-btn-small" id="fmg-discuss-focus-toggle" title="切换聊天专注模式">↕ 专注聊天</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-worldbook-toggle" title="勾选 AI 回复并直接转成世界书条目">📚 转世界书</button>
-                                <button class="fmg-btn-small" id="fmg-discuss-worldbook-apply" title="将勾选的 AI 回复生成并直接添加到世界书" style="display:none;" disabled>✅ 添加所选</button>
+                                <button class="fmg-btn-small" id="fmg-discuss-worldbook-apply" title="将勾选的 AI 回复直接添加到世界书" style="display:none;" disabled>✅ 添加所选</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-worldbook-cancel" title="退出世界书勾选模式" style="display:none;">✖ 取消</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-refresh" title="刷新角色数据">🔄 刷新</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-discuss-clear" title="清空对话">🗑️ 清空</button>
                                 <span class="fmg-token-badge" id="fmg-discuss-token-total" title="估算当前讨论会话发送内容的总 token">总Token --</span>
+                            </div>
+                        </div>
+
+                        <div class="fmg-discuss-worldbook-toolbar" id="fmg-discuss-worldbook-toolbar" style="display:none;">
+                            <div class="fmg-discuss-worldbook-toolbar-row">
+                                <span class="fmg-discuss-worldbook-toolbar-label">状态</span>
+                                <div class="fmg-worldbook-state-group">
+                                    <label class="fmg-worldbook-state-chip blue">
+                                        <input id="fmg-discuss-worldbook-constant" type="checkbox" checked>
+                                        <span>蓝灯</span>
+                                    </label>
+                                    <label class="fmg-worldbook-state-chip green">
+                                        <input id="fmg-discuss-worldbook-normal" type="checkbox">
+                                        <span>绿灯</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="fmg-discuss-worldbook-toolbar-row">
+                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-position">位置</label>
+                                <select class="fmg-worldbook-select" id="fmg-discuss-worldbook-position"></select>
+                            </div>
+                            <div class="fmg-discuss-worldbook-toolbar-row">
+                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-depth">深度</label>
+                                <input class="fmg-worldbook-input" id="fmg-discuss-worldbook-depth" type="number" step="1" value="4">
+                            </div>
+                            <div class="fmg-discuss-worldbook-toolbar-row">
+                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-order">顺序</label>
+                                <input class="fmg-worldbook-input" id="fmg-discuss-worldbook-order" type="number" step="1" value="100">
                             </div>
                         </div>
                         
@@ -677,7 +705,7 @@
         document.addEventListener('click', (e) => {
             if (e.target.id === 'fmg-discuss-worldbook-toggle') {
                 setDiscussWorldbookSelectionMode(true);
-                showStatus('fmg-discuss-status', 'success', '已进入世界书勾选模式，请勾选需要沉淀为世界书条目的 AI 回复');
+                showStatus('fmg-discuss-status', 'success', '已进入世界书勾选模式，请勾选 AI 回复并设置位置、深度、顺序和蓝绿灯');
             }
             if (e.target.id === 'fmg-discuss-worldbook-cancel') {
                 setDiscussWorldbookSelectionMode(false);
@@ -699,6 +727,35 @@
                 selectedDiscussWorldbookMessageIds.delete(messageId);
             }
             updateDiscussWorldbookSelectionUI();
+        });
+
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'fmg-discuss-worldbook-constant') {
+                discussWorldbookDraftConfig.constant = e.target.checked ? true : false;
+                updateDiscussWorldbookToolbarControls();
+            }
+            if (e.target.id === 'fmg-discuss-worldbook-normal') {
+                discussWorldbookDraftConfig.constant = e.target.checked ? false : true;
+                updateDiscussWorldbookToolbarControls();
+            }
+            if (e.target.id === 'fmg-discuss-worldbook-position') {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                discussWorldbookDraftConfig.position = Number(e.target.value);
+                discussWorldbookDraftConfig.role = selectedOption?.dataset?.role !== undefined
+                    ? Number(selectedOption.dataset.role)
+                    : WORLDBOOK_DEPTH_ROLES.system;
+                updateDiscussWorldbookToolbarControls();
+            }
+            if (e.target.id === 'fmg-discuss-worldbook-depth') {
+                discussWorldbookDraftConfig.depth = Number.isFinite(Number(e.target.value))
+                    ? Number(e.target.value)
+                    : 4;
+            }
+            if (e.target.id === 'fmg-discuss-worldbook-order') {
+                discussWorldbookDraftConfig.order = Number.isFinite(Number(e.target.value))
+                    ? Number(e.target.value)
+                    : 100;
+            }
         });
 
         // 讨论页 - 世界书选择
@@ -1724,6 +1781,13 @@
     let discussWorldbookSelectionMode = false;
     let isDiscussWorldbookApplying = false;
     const selectedDiscussWorldbookMessageIds = new Set();
+    const discussWorldbookDraftConfig = {
+        constant: true,
+        position: WORLDBOOK_POSITIONS.before,
+        role: WORLDBOOK_DEPTH_ROLES.system,
+        depth: 4,
+        order: 100
+    };
     let worldbookMessages = [];
     let worldbookFocusMode = false;
     let worldbookTokenUpdateTimer = null;
@@ -1773,12 +1837,13 @@
         const toggleBtn = document.getElementById('fmg-discuss-worldbook-toggle');
         const applyBtn = document.getElementById('fmg-discuss-worldbook-apply');
         const cancelBtn = document.getElementById('fmg-discuss-worldbook-cancel');
+        const toolbar = document.getElementById('fmg-discuss-worldbook-toolbar');
         const selectedCount = selectedDiscussWorldbookMessageIds.size;
 
         if (toggleBtn) {
             toggleBtn.textContent = discussWorldbookSelectionMode ? '📚 选取中' : '📚 转世界书';
             toggleBtn.title = discussWorldbookSelectionMode
-                ? '正在勾选 AI 回复，完成后点击“添加所选”'
+                ? '正在勾选 AI 回复，确认参数后点击“添加所选”'
                 : '进入世界书勾选模式，从多条 AI 回复中挑选需要沉淀的设定';
             toggleBtn.classList.toggle('active', discussWorldbookSelectionMode);
             toggleBtn.disabled = isDiscussWorldbookApplying;
@@ -1797,6 +1862,60 @@
         if (cancelBtn) {
             cancelBtn.style.display = discussWorldbookSelectionMode ? '' : 'none';
             cancelBtn.disabled = isDiscussWorldbookApplying;
+        }
+
+        if (toolbar) {
+            toolbar.style.display = discussWorldbookSelectionMode ? '' : 'none';
+        }
+
+        updateDiscussWorldbookToolbarControls();
+    }
+
+    function updateDiscussWorldbookToolbarControls() {
+        const positionEl = document.getElementById('fmg-discuss-worldbook-position');
+        const depthEl = document.getElementById('fmg-discuss-worldbook-depth');
+        const orderEl = document.getElementById('fmg-discuss-worldbook-order');
+        const constantEl = document.getElementById('fmg-discuss-worldbook-constant');
+        const normalEl = document.getElementById('fmg-discuss-worldbook-normal');
+
+        if (positionEl) {
+            if (!positionEl.dataset.optionsBound) {
+                positionEl.innerHTML = renderWorldbookSelectOptions(
+                    getWorldbookPositionOptions(null),
+                    discussWorldbookDraftConfig.position,
+                    discussWorldbookDraftConfig.role
+                );
+                positionEl.dataset.optionsBound = 'true';
+            }
+
+            Array.from(positionEl.options).forEach(option => {
+                const optionRole = option.dataset.role !== undefined
+                    ? Number(option.dataset.role)
+                    : null;
+                option.selected = Number(option.value) === Number(discussWorldbookDraftConfig.position)
+                    && (Number(option.value) !== WORLDBOOK_POSITIONS.atDepth || Number(optionRole ?? WORLDBOOK_DEPTH_ROLES.system) === Number(discussWorldbookDraftConfig.role));
+            });
+            positionEl.disabled = isDiscussWorldbookApplying;
+        }
+
+        if (depthEl) {
+            depthEl.value = String(discussWorldbookDraftConfig.depth);
+            depthEl.disabled = isDiscussWorldbookApplying || Number(discussWorldbookDraftConfig.position) !== WORLDBOOK_POSITIONS.atDepth;
+        }
+
+        if (orderEl) {
+            orderEl.value = String(discussWorldbookDraftConfig.order);
+            orderEl.disabled = isDiscussWorldbookApplying;
+        }
+
+        if (constantEl) {
+            constantEl.checked = discussWorldbookDraftConfig.constant === true;
+            constantEl.disabled = isDiscussWorldbookApplying;
+        }
+
+        if (normalEl) {
+            normalEl.checked = discussWorldbookDraftConfig.constant !== true;
+            normalEl.disabled = isDiscussWorldbookApplying;
         }
     }
 
@@ -2556,48 +2675,82 @@ ${editableEntriesText}
 15. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
     }
 
-    function buildDiscussSelectionWorldbookPrompt(messages) {
-        const snippets = messages
-            .map((message, index) => `【讨论结论 ${index + 1}】\n${String(message.content || '').trim()}`)
-            .join('\n\n');
-
-        return `请把下面这些已经确认过的讨论结论，提炼为可直接写入当前角色关联世界书的条目。
-
-要求：
-1. 只保留稳定、可复用、值得长期保存的设定，不要保留寒暄、过渡句或试探性表达。
-2. 如果内容适合拆成多个条目，可以拆分；如果几段内容本来属于同一条设定，也可以合并。
-3. 如果某段内容更适合补充或修订当前已选世界书中的已有条目，请优先更新已有条目并填写对应 uid。
-4. 这次生成的条目会直接添加到世界书，请避免重复、空泛和过度拆分。
-5. 只输出真正适合沉淀为世界书的条目；如果某段内容不适合入书，可以忽略。
-
-以下是勾选的讨论内容：
-${snippets}`;
+    function stripDiscussMessageBlocks(content) {
+        return String(content || '')
+            .replace(/\[EDIT:\w+\][\s\S]*?\[\/EDIT\]/g, '')
+            .replace(/\[(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\][\s\S]*?\[\/(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]/g, '')
+            .trim();
     }
 
-    async function requestWorldbookStructuredReply(messages) {
-        const controller = new AbortController();
-        return await new Promise((resolve, reject) => {
-            const onDone = (content) => resolve(content);
-            const onError = (error) => reject(error);
-            const onChunk = () => {};
-            const runner = settings.apiType === 'openai' ? callOpenAIStreamMessages : callGeminiStreamMessages;
+    function deriveWorldbookCommentFromDiscuss(content, index) {
+        const lines = stripDiscussMessageBlocks(content)
+            .split('\n')
+            .map(line => line.replace(/^[#*\-\d.\s>]+/, '').trim())
+            .filter(Boolean);
 
-            runner(messages, onChunk, onDone, controller.signal).catch(reject);
-        });
+        const firstLine = lines[0] || `讨论条目 ${index + 1}`;
+        return firstLine.length > 24 ? `${firstLine.slice(0, 24).trim()}...` : firstLine;
+    }
+
+    function deriveWorldbookKeysFromDiscuss(comment, content) {
+        const normalizedComment = String(comment || '').replace(/[：:。！？!?,，、；;（）()\[\]【】]/g, ' ').trim();
+        const candidates = normalizedComment
+            .split(/\s+/)
+            .map(part => part.trim())
+            .filter(Boolean)
+            .slice(0, 3);
+
+        if (candidates.length > 0) {
+            return candidates;
+        }
+
+        const stripped = stripDiscussMessageBlocks(content);
+        if (!stripped) {
+            return ['讨论条目'];
+        }
+
+        const fallback = stripped.slice(0, 18).trim();
+        return [fallback || '讨论条目'];
+    }
+
+    function buildDirectWorldbookEntriesFromDiscuss(messages) {
+        return messages.map((message, index) => {
+            const cleanedContent = stripDiscussMessageBlocks(message.content);
+            const comment = deriveWorldbookCommentFromDiscuss(cleanedContent, index);
+            const keys = discussWorldbookDraftConfig.constant
+                ? []
+                : deriveWorldbookKeysFromDiscuss(comment, cleanedContent);
+
+            return {
+                uid: null,
+                comment,
+                keys,
+                secondary_keys: [],
+                content: cleanedContent,
+                constant: discussWorldbookDraftConfig.constant === true,
+                selective: discussWorldbookDraftConfig.constant === true ? false : true,
+                position: discussWorldbookDraftConfig.position,
+                depth: Number.isFinite(Number(discussWorldbookDraftConfig.depth))
+                    ? Number(discussWorldbookDraftConfig.depth)
+                    : 4,
+                role: discussWorldbookDraftConfig.position === WORLDBOOK_POSITIONS.atDepth
+                    ? discussWorldbookDraftConfig.role
+                    : null,
+                outlet_name: '',
+                placement_reason: '由讨论页勾选内容直接转存为世界书草稿。',
+                insertion_order: Number.isFinite(Number(discussWorldbookDraftConfig.order))
+                    ? Number(discussWorldbookDraftConfig.order)
+                    : 100,
+                enabled: true,
+                vectorized: false
+            };
+        }).filter(entry => String(entry.content || '').trim());
     }
 
     async function generateWorldbookFromDiscussSelection() {
         if (isDiscussWorldbookApplying) return;
         if (isDiscussGenerating) {
             showStatus('fmg-discuss-status', 'error', '请先等待当前讨论回复完成，再转世界书');
-            return;
-        }
-        if (isWorldbookGenerating) {
-            showStatus('fmg-discuss-status', 'error', '当前世界书页正在生成，请稍后再试');
-            return;
-        }
-        if (!settings.apiUrl || !settings.apiKey) {
-            showStatus('fmg-discuss-status', 'error', '请先在API页面配置API');
             return;
         }
         if (!window._fmgCharData) {
@@ -2614,26 +2767,15 @@ ${snippets}`;
         isDiscussWorldbookApplying = true;
         renderDiscussionHistory();
         updateDiscussWorldbookSelectionUI();
-        showStatus('fmg-discuss-status', 'loading', `正在把 ${selectedMessages.length} 条 AI 回复整理成世界书条目...`);
+        showStatus('fmg-discuss-status', 'loading', `正在把 ${selectedMessages.length} 条 AI 回复直接写入世界书...`);
 
         try {
-            const systemPrompt = buildWorldbookSystemPrompt();
-            if (!systemPrompt) {
-                throw new Error('当前没有可用的世界书生成上下文');
+            const directEntries = buildDirectWorldbookEntriesFromDiscuss(selectedMessages);
+            if (directEntries.length === 0) {
+                throw new Error('勾选的消息里没有可直接写入的正文内容');
             }
 
-            const reply = await requestWorldbookStructuredReply([
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: buildDiscussSelectionWorldbookPrompt(selectedMessages) }
-            ]);
-
-            const parsedEntries = parseWorldbookEntryBlocks(String(reply || ''));
-            const validEntries = parsedEntries.filter(entry => !entry.invalid);
-            if (validEntries.length === 0) {
-                throw new Error('AI 没有返回可解析的世界书条目');
-            }
-
-            const results = await applyWorldbookEntriesBatch(validEntries);
+            const results = await applyWorldbookEntriesBatch(directEntries);
             const successResults = results.filter(result => result.isFailed !== true);
             const failedCount = results.filter(result => result.isFailed === true).length;
             if (successResults.length === 0) {
@@ -2642,12 +2784,10 @@ ${snippets}`;
 
             const addedCount = successResults.filter(result => result.isUpdate !== true).length;
             const updatedCount = successResults.filter(result => result.isUpdate === true).length;
-            const invalidCount = parsedEntries.length - validEntries.length;
             const summaryParts = [];
 
             if (addedCount > 0) summaryParts.push(`新增 ${addedCount} 条`);
             if (updatedCount > 0) summaryParts.push(`更新 ${updatedCount} 条`);
-            if (invalidCount > 0) summaryParts.push(`忽略 ${invalidCount} 条解析失败内容`);
             if (failedCount > 0) summaryParts.push(`${failedCount} 条写入失败`);
 
             setDiscussWorldbookSelectionMode(false);
