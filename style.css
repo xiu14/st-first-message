@@ -1033,7 +1033,7 @@
     display: none;
 }
 
-.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle):not(#fmg-wb-token-total) {
+.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle):not(#fmg-wb-token-total):not(#fmg-wb-undo):not(#fmg-wb-clear) {
     display: none;
 }
 
@@ -1054,6 +1054,13 @@
 }
 
 .fmg-worldbook-container.chat-focused #fmg-wb-focus-toggle {
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 1.1;
+}
+
+.fmg-worldbook-container.chat-focused #fmg-wb-undo,
+.fmg-worldbook-container.chat-focused #fmg-wb-clear {
     padding: 2px 6px;
     font-size: 10px;
     line-height: 1.1;
