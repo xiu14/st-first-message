@@ -272,14 +272,16 @@
                         <div class="fmg-chat-header">
                             <span class="fmg-chat-char-info" id="fmg-discuss-char-name">未选择角色</span>
                             <div class="fmg-btn-group">
+                                <button class="fmg-btn-small" id="fmg-discuss-focus-toggle" title="切换聊天专注模式">↕ 专注聊天</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-refresh" title="刷新角色数据">🔄 刷新</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-discuss-clear" title="清空对话">🗑️ 清空</button>
+                                <span class="fmg-token-badge" id="fmg-discuss-token-total" title="估算当前讨论会话发送内容的总 token">总Token --</span>
                             </div>
                         </div>
                         
                         <!-- 角色卡完整内容折叠预览 -->
-                        <div class="fmg-discuss-info-panel" id="fmg-discuss-info-panel">
+                        <div class="fmg-discuss-info-panel fmg-discuss-focus-hidden" id="fmg-discuss-info-panel">
                             <div class="fmg-collapse-section">
                                 <div class="fmg-collapse-header" data-target="fmg-collapse-fullcard">
                                     <span>📋 角色卡完整内容</span>
@@ -636,6 +638,7 @@
             if (e.target.id === 'fmg-inc-first' || e.target.id === 'fmg-wb-inc-first') settings.includeCurrentFirstMes = e.target.checked;
             syncCharacterIncludeControls();
             saveSettings();
+            requestDiscussTokenCountUpdate();
             requestWorldbookTokenCountUpdate();
         });
 
@@ -659,6 +662,12 @@
             if (e.target.id === 'fmg-discuss-refresh') {
                 await loadCharacterData();
                 updateDiscussPanel();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-discuss-focus-toggle') {
+                setDiscussFocusMode(!discussFocusMode);
             }
         });
 
@@ -733,6 +742,9 @@
         });
 
         document.addEventListener('input', (e) => {
+            if (e.target.id === 'fmg-discuss-input') {
+                requestDiscussTokenCountUpdate(120);
+            }
             if (e.target.id === 'fmg-wb-input') {
                 requestWorldbookTokenCountUpdate(120);
             }
@@ -1539,7 +1551,10 @@
             saveSettings();
             updateCounts();
             modal.remove();
-            if (isWorldInfo) requestWorldbookTokenCountUpdate();
+            if (isWorldInfo) {
+                requestDiscussTokenCountUpdate();
+                requestWorldbookTokenCountUpdate();
+            }
 
             console.log(`[开场白生成器] 已保存${isWorldInfo ? '世界书' : '预设'}选择:`, selectedIdentifiers);
         };
@@ -1669,6 +1684,9 @@
 
     // 讨论对话历史
     let discussMessages = [];
+    let discussFocusMode = false;
+    let discussTokenUpdateTimer = null;
+    let discussTokenUpdateVersion = 0;
     let discussAbortController = null;
     let isDiscussGenerating = false;
     let discussAutoScroll = true;
@@ -1710,6 +1728,7 @@
             container.innerHTML = getDiscussWelcomeHtml();
             discussAutoScroll = true;
             updateDiscussUndoButton();
+            requestDiscussTokenCountUpdate();
             return;
         }
 
@@ -1717,6 +1736,7 @@
         discussAutoScroll = true;
         container.scrollTop = container.scrollHeight;
         updateDiscussUndoButton();
+        requestDiscussTokenCountUpdate();
     }
 
     function updateDiscussUndoButton() {
@@ -1725,6 +1745,81 @@
 
         const hasUndoableRound = discussMessages.some(msg => msg.role === 'user');
         undoBtn.disabled = isDiscussGenerating || !hasUndoableRound;
+    }
+
+    function syncDiscussSystemPrompt() {
+        const systemPrompt = buildDiscussSystemPrompt();
+        discussMessages = discussMessages.filter(msg => msg.role !== 'system');
+
+        if (systemPrompt) {
+            discussMessages.unshift({ role: 'system', content: systemPrompt });
+        }
+    }
+
+    function setDiscussFocusMode(enabled) {
+        discussFocusMode = enabled === true;
+
+        const container = document.querySelector('.fmg-discuss-container');
+        if (container) {
+            container.classList.toggle('chat-focused', discussFocusMode);
+        }
+
+        const toggleBtn = document.getElementById('fmg-discuss-focus-toggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = discussFocusMode ? '↕ 展开' : '↕ 专注';
+            toggleBtn.title = discussFocusMode ? '显示讨论页的其他操作区' : '收起非聊天区域，只保留聊天区';
+            toggleBtn.classList.toggle('active', discussFocusMode);
+        }
+    }
+
+    function requestDiscussTokenCountUpdate(delay = 0) {
+        if (discussTokenUpdateTimer) {
+            clearTimeout(discussTokenUpdateTimer);
+        }
+
+        discussTokenUpdateTimer = setTimeout(() => {
+            discussTokenUpdateTimer = null;
+            updateDiscussTokenCount();
+        }, Math.max(0, delay));
+    }
+
+    async function updateDiscussTokenCount() {
+        const counterEl = document.getElementById('fmg-discuss-token-total');
+        if (!counterEl) return;
+
+        const version = ++discussTokenUpdateVersion;
+        counterEl.textContent = '总Token ...';
+
+        try {
+            const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+            if (!context || typeof context.getTokenCountAsync !== 'function') {
+                counterEl.textContent = '总Token --';
+                return;
+            }
+
+            const chunks = [];
+            const systemPrompt = buildDiscussSystemPrompt();
+            if (systemPrompt) chunks.push(systemPrompt);
+
+            discussMessages
+                .filter(msg => msg.role !== 'system' && String(msg.content || '').trim())
+                .forEach(msg => chunks.push(String(msg.content)));
+
+            const inputEl = document.getElementById('fmg-discuss-input');
+            const draftText = inputEl && typeof inputEl.value === 'string' ? inputEl.value.trim() : '';
+            if (draftText) chunks.push(draftText);
+
+            const counts = await Promise.all(chunks.map(chunk => context.getTokenCountAsync(String(chunk), 0)));
+            if (version !== discussTokenUpdateVersion) return;
+
+            const total = counts.reduce((sum, count) => sum + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
+            counterEl.textContent = `总Token ${total}`;
+        } catch (error) {
+            console.warn('[开场白生成器] 统计讨论 token 失败:', error);
+            if (version === discussTokenUpdateVersion) {
+                counterEl.textContent = '总Token --';
+            }
+        }
     }
 
     function updateDiscussPanel() {
@@ -1789,6 +1884,8 @@
 
         // 更新讨论页世界书计数
         updateDiscussWiCount();
+        setDiscussFocusMode(discussFocusMode);
+        requestDiscussTokenCountUpdate();
     }
 
     function updateDiscussWiCount() {
@@ -3331,16 +3428,11 @@ ${editableEntriesText}
         // 显示用户消息
         appendChatMessage('user', userText);
 
-        // 如果是第一条消息，构建 system prompt
-        if (discussMessages.length === 0) {
-            const systemPrompt = buildDiscussSystemPrompt();
-            if (systemPrompt) {
-                discussMessages.push({ role: 'system', content: systemPrompt });
-            }
-        }
+        syncDiscussSystemPrompt();
 
         // 添加用户消息到历史
         discussMessages.push({ role: 'user', content: userText });
+        requestDiscussTokenCountUpdate();
 
         // 开始流式生成
         isDiscussGenerating = true;
@@ -3362,6 +3454,7 @@ ${editableEntriesText}
                 (finalContent) => {
                     appendChatMessage('assistant', finalContent, false);
                     discussMessages.push({ role: 'assistant', content: finalContent });
+                    requestDiscussTokenCountUpdate();
                     finishDiscussGeneration();
                 },
                 (error) => {
@@ -3391,6 +3484,7 @@ ${editableEntriesText}
             const textEl = streaming.querySelector('.fmg-chat-text');
             if (textEl && textEl.textContent.trim()) {
                 discussMessages.push({ role: 'assistant', content: textEl.textContent });
+                requestDiscussTokenCountUpdate();
             }
         }
         finishDiscussGeneration();
@@ -3415,6 +3509,7 @@ ${editableEntriesText}
         discussMessages = [];
         discussAutoScroll = true;
         renderDiscussionHistory();
+        requestDiscussTokenCountUpdate();
 
         const statusEl = document.getElementById('fmg-discuss-status');
         if (statusEl) statusEl.style.display = 'none';

@@ -1028,6 +1028,44 @@
     display: contents;
 }
 
+.fmg-discuss-focus-hidden {
+    display: block;
+}
+
+.fmg-discuss-container.chat-focused .fmg-discuss-focus-hidden,
+.fmg-discuss-container.chat-focused #fmg-discuss-status {
+    display: none;
+}
+
+.fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
+    display: none;
+}
+
+.fmg-discuss-container.chat-focused .fmg-chat-header {
+    gap: 6px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+}
+
+.fmg-discuss-container.chat-focused .fmg-chat-char-info {
+    max-width: 120px;
+    padding: 1px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fmg-discuss-container.chat-focused #fmg-discuss-focus-toggle,
+.fmg-discuss-container.chat-focused #fmg-discuss-undo,
+.fmg-discuss-container.chat-focused #fmg-discuss-clear,
+.fmg-discuss-container.chat-focused #fmg-discuss-token-total {
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 1.1;
+}
+
 .fmg-worldbook-container.chat-focused .fmg-worldbook-focus-hidden,
 .fmg-worldbook-container.chat-focused #fmg-wb-status {
     display: none;
