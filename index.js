@@ -2670,9 +2670,14 @@ ${editableEntriesText}
 10. 请同时给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
 11. 如果用户要求你“帮我判断这个条目应该放在哪里”，你要主动分析它更适合普通世界书、作者注附近、depth 注入还是 outlet，并在输出条目块时填好对应字段。
 12. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-13. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写对应 uid，不要反问用户去查 uid。
-14. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
-15. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
+13. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
+   - 字符串值必须使用英文双引号包裹
+   - 字符串内部如果需要换行，必须写成 \\n，不要直接在字符串中换行
+   - 字符串内部如果需要英文双引号，必须写成 \\\"
+   - 最后一个字段或数组元素后面不要加逗号
+14. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写对应 uid，不要反问用户去查 uid。
+15. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
+16. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
     }
 
     function stripDiscussMessageBlocks(content) {
@@ -2941,6 +2946,180 @@ ${editableEntriesText}
         }).join('');
     }
 
+    const WORLDBOOK_ENTRY_JSON_FIELDS = [
+        'uid',
+        'comment',
+        'title',
+        'name',
+        'keys',
+        'key',
+        'secondary_keys',
+        'keysecondary',
+        'secondaryKeys',
+        'content',
+        'entry_content',
+        'text',
+        'constant',
+        'selective',
+        'position',
+        'depth',
+        'role',
+        'outlet_name',
+        'outletName',
+        'placement_reason',
+        'position_reason',
+        'reason',
+        'insertion_order',
+        'order',
+        'enabled'
+    ];
+
+    function cleanWorldbookJsonBlock(rawBlock) {
+        let block = String(rawBlock || '').trim();
+
+        if (block.startsWith('```')) {
+            block = block.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        }
+
+        const objectStart = block.indexOf('{');
+        const objectEnd = block.lastIndexOf('}');
+        if (objectStart !== -1 && objectEnd > objectStart) {
+            block = block.slice(objectStart, objectEnd + 1).trim();
+        }
+
+        return block;
+    }
+
+    function parseWorldbookJsonValue(rawValue, fieldName) {
+        let value = String(rawValue || '').trim();
+        value = value.replace(/,\s*$/, '').trim();
+
+        if (!value) return undefined;
+
+        try {
+            return JSON.parse(value);
+        } catch (_) {
+            // Fall through to tolerant field-level parsing for common model output mistakes.
+        }
+
+        const normalizedField = String(fieldName || '').toLowerCase();
+
+        if (normalizedField === 'uid' || normalizedField === 'depth' || normalizedField === 'insertion_order' || normalizedField === 'order') {
+            const numericValue = Number(value.replace(/^['"]|['"]$/g, '').trim());
+            return Number.isFinite(numericValue) ? numericValue : undefined;
+        }
+
+        if (normalizedField === 'constant' || normalizedField === 'selective' || normalizedField === 'enabled') {
+            const booleanText = value.replace(/^['"]|['"]$/g, '').trim().toLowerCase();
+            if (booleanText === 'true') return true;
+            if (booleanText === 'false') return false;
+            return undefined;
+        }
+
+        if (normalizedField === 'keys' || normalizedField === 'key' || normalizedField === 'secondary_keys' || normalizedField === 'keysecondary' || normalizedField === 'secondarykeys') {
+            const arrayText = value.replace(/^\[/, '').replace(/\]$/, '').trim();
+            if (!arrayText) return [];
+
+            const quotedItems = [];
+            arrayText.replace(/["']([^"']+)["']/g, (_, item) => {
+                quotedItems.push(item.trim());
+                return '';
+            });
+
+            if (quotedItems.length > 0) {
+                return quotedItems;
+            }
+
+            return arrayText
+                .split(/[\n,|]/)
+                .map(item => item.replace(/^['"]|['"]$/g, '').trim())
+                .filter(Boolean);
+        }
+
+        return parseWorldbookJsonStringValue(value);
+    }
+
+    function parseWorldbookJsonStringValue(value) {
+        let text = String(value || '').trim();
+        const quote = text[0];
+
+        if ((quote === '"' || quote === "'") && text.endsWith(quote)) {
+            text = text.slice(1, -1);
+        } else if (quote === '"' || quote === "'") {
+            text = text.slice(1);
+        }
+
+        return text
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\'/g, "'")
+            .replace(/\\\\/g, '\\')
+            .trim();
+    }
+
+    function parseLooseWorldbookJsonObject(rawBlock) {
+        let body = cleanWorldbookJsonBlock(rawBlock);
+
+        if (body.startsWith('{') && body.endsWith('}')) {
+            body = body.slice(1, -1);
+        }
+
+        const fieldPattern = new RegExp(`(^|[\\n\\r,])\\s*["']?(${WORLDBOOK_ENTRY_JSON_FIELDS.join('|')})["']?\\s*:`, 'g');
+        const matches = [];
+        let match;
+
+        while ((match = fieldPattern.exec(body)) !== null) {
+            matches.push({
+                name: match[2],
+                start: match.index,
+                valueStart: fieldPattern.lastIndex
+            });
+        }
+
+        if (matches.length === 0) {
+            throw new Error('未找到可识别的世界书字段');
+        }
+
+        const parsed = {};
+        for (let i = 0; i < matches.length; i++) {
+            const current = matches[i];
+            const next = matches[i + 1];
+            const rawValue = body.slice(current.valueStart, next ? next.start : body.length);
+            const parsedValue = parseWorldbookJsonValue(rawValue, current.name);
+
+            if (parsedValue !== undefined) {
+                parsed[current.name] = parsedValue;
+            }
+        }
+
+        return parsed;
+    }
+
+    function parseWorldbookJsonObject(rawBlock) {
+        const cleanedBlock = cleanWorldbookJsonBlock(rawBlock);
+        const candidates = [
+            cleanedBlock,
+            cleanedBlock.replace(/,\s*([}\]])/g, '$1')
+        ];
+        let strictError = null;
+
+        for (const candidate of candidates) {
+            try {
+                return JSON.parse(candidate);
+            } catch (error) {
+                strictError = error;
+            }
+        }
+
+        try {
+            return parseLooseWorldbookJsonObject(cleanedBlock);
+        } catch (looseError) {
+            throw new Error(`${strictError?.message || 'JSON 解析失败'}；宽松解析也失败: ${looseError.message}`);
+        }
+    }
+
     function parseWorldbookEntryBlocks(text) {
         const regex = /\[(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]([\s\S]*?)\[\/(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]/g;
         const entries = [];
@@ -2949,7 +3128,7 @@ ${editableEntriesText}
         while ((match = regex.exec(text)) !== null) {
             const rawBlock = match[1].trim();
             try {
-                const parsed = JSON.parse(rawBlock);
+                const parsed = parseWorldbookJsonObject(rawBlock);
                 const content = String(parsed.content || parsed.entry_content || parsed.text || '').trim();
                 const keys = normalizeStringArray(parsed.keys ?? parsed.key);
                 const secondaryKeys = normalizeStringArray(parsed.secondary_keys ?? parsed.keysecondary ?? parsed.secondaryKeys);
