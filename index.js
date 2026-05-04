@@ -26,7 +26,10 @@
         includePresetPrompts: false,
         selectedPresetPrompts: [],
         // 开场白历史记录（最多5条）
-        firstMessageHistory: []
+        firstMessageHistory: [],
+        // 讨论/世界书最近会话（每个角色每类最多3条）
+        discussSessionHistory: [],
+        worldbookSessionHistory: []
     };
 
     let settings = { ...DEFAULT_SETTINGS };
@@ -331,6 +334,13 @@
                                     <button class="fmg-btn-small fmg-btn-open" id="fmg-discuss-wi-open">选择条目</button>
                                 </div>
                             </div>
+                            <div class="fmg-chat-session-bar">
+                                <span>🕘 最近会话</span>
+                                <div class="fmg-btn-group">
+                                    <span class="fmg-count" id="fmg-discuss-session-count">0/3</span>
+                                    <button class="fmg-btn-small fmg-btn-open" id="fmg-discuss-session-open">打开</button>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="fmg-chat-messages" id="fmg-chat-messages">
@@ -386,6 +396,13 @@
                                 <div class="fmg-btn-group">
                                     <span class="fmg-count" id="fmg-wb-wi-count">0/0</span>
                                     <button class="fmg-btn-small fmg-btn-open" id="fmg-wb-wi-open">选择条目</button>
+                                </div>
+                            </div>
+                            <div class="fmg-chat-session-bar">
+                                <span>🕘 最近会话</span>
+                                <div class="fmg-btn-group">
+                                    <span class="fmg-count" id="fmg-wb-session-count">0/3</span>
+                                    <button class="fmg-btn-small fmg-btn-open" id="fmg-wb-session-open">打开</button>
                                 </div>
                             </div>
                         </div>
@@ -644,6 +661,12 @@
                     return;
                 }
 
+                const sessionModal = document.getElementById('fmg-chat-session-modal');
+                if (sessionModal) {
+                    sessionModal.remove();
+                    return;
+                }
+
                 const selectModal = document.getElementById('fmg-selection-modal');
                 if (selectModal) {
                     selectModal.remove();
@@ -763,6 +786,11 @@
             if (e.target.id === 'fmg-discuss-wi-open') openSelectionModal('worldinfo');
         });
 
+        // 讨论页 - 最近会话
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-discuss-session-open') openChatSessionModal('discuss');
+        });
+
         // 世界书页 - 发送
         document.addEventListener('click', (e) => {
             if (e.target.id === 'fmg-wb-send') sendWorldbookMessage();
@@ -796,6 +824,35 @@
         // 世界书页 - 世界书选择
         document.addEventListener('click', (e) => {
             if (e.target.id === 'fmg-wb-wi-open') openSelectionModal('worldinfo');
+        });
+
+        // 世界书页 - 最近会话
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'fmg-wb-session-open') openChatSessionModal('worldbook');
+        });
+
+        document.addEventListener('click', (e) => {
+            const modal = document.getElementById('fmg-chat-session-modal');
+            if (!modal) return;
+
+            if (e.target.id === 'fmg-chat-session-close' || e.target.classList.contains('fmg-select-overlay')) {
+                modal.remove();
+                return;
+            }
+
+            const deleteBtn = e.target.closest('.fmg-chat-session-delete');
+            if (deleteBtn) {
+                deleteChatSession(deleteBtn.dataset.sessionType, deleteBtn.dataset.sessionId);
+                renderChatSessionModalBody(deleteBtn.dataset.sessionType);
+                return;
+            }
+
+            if (e.target.id === 'fmg-chat-session-load') {
+                const checked = modal.querySelector('input[name="fmg-chat-session-choice"]:checked');
+                if (!checked) return;
+                loadChatSession(modal.dataset.sessionType, checked.value);
+                modal.remove();
+            }
         });
 
         // 讨论页 - 折叠切换
@@ -1062,7 +1119,10 @@
         
         const historyModal = document.getElementById('fmg-history-detail-modal');
         if (historyModal) historyModal.remove();
-        
+
+        const sessionModal = document.getElementById('fmg-chat-session-modal');
+        if (sessionModal) sessionModal.remove();
+
         const selectModal = document.getElementById('fmg-selection-modal');
         if (selectModal) selectModal.remove();
     }
@@ -1074,6 +1134,7 @@
         document.querySelectorAll('.fmg-tab-content').forEach(content => {
             content.classList.toggle('active', content.dataset.tab === tabName);
         });
+        renderChatSessionControls();
     }
 
     // ========================================
@@ -1131,6 +1192,7 @@
                     spec_version: d.spec_version || '',
                     _raw: d
                 };
+                resetChatSessionsForCharacter(window._fmgCharData.name);
 
             } else {
                 charNameEl.textContent = '未选择角色';
@@ -1141,6 +1203,7 @@
                     wbPreviewEl.innerHTML = '<span style="color: #ff6464; font-size: 11px;">请先选择一个角色</span>';
                 }
                 window._fmgCharData = null;
+                resetChatSessionsForCharacter(null);
             }
 
             // 加载世界书条目
@@ -1770,6 +1833,7 @@
     // ========================================
 
     // 讨论对话历史
+    const CHAT_SESSION_HISTORY_LIMIT = 3;
     let discussMessages = [];
     let chatMessageIdCounter = 0;
     let discussFocusMode = false;
@@ -1795,6 +1859,9 @@
     let worldbookAbortController = null;
     let isWorldbookGenerating = false;
     let worldbookAutoScroll = true;
+    let currentDiscussSessionId = null;
+    let currentWorldbookSessionId = null;
+    let currentChatSessionCharacterName = null;
 
     function isDiscussNearBottom(container) {
         if (!container) return true;
@@ -1817,6 +1884,274 @@
             chatMessageIdCounter += 1;
             message.id = `chat_${chatMessageIdCounter}`;
         });
+    }
+
+    function resetChatSessionsForCharacter(charName) {
+        const normalizedName = charName || null;
+        if (currentChatSessionCharacterName === normalizedName) return;
+
+        currentChatSessionCharacterName = normalizedName;
+        currentDiscussSessionId = null;
+        currentWorldbookSessionId = null;
+        discussMessages = [];
+        worldbookMessages = [];
+        selectedDiscussWorldbookMessageIds.clear();
+        discussWorldbookSelectionMode = false;
+        renderDiscussionHistory();
+        renderWorldbookHistory();
+        renderChatSessionControls();
+    }
+
+    function getChatSessionConfig(type) {
+        return type === 'worldbook'
+            ? {
+                key: 'worldbookSessionHistory',
+                messages: () => worldbookMessages,
+                setMessages: (messages) => { worldbookMessages = messages; },
+                getCurrentId: () => currentWorldbookSessionId,
+                setCurrentId: (id) => { currentWorldbookSessionId = id; },
+                countId: 'fmg-wb-session-count',
+                statusId: 'fmg-wb-status',
+                title: '世界书最近会话',
+                emptyText: '暂无世界书会话',
+                loadBlocked: () => isWorldbookGenerating,
+                render: renderWorldbookHistory,
+                updatePanel: updateWorldbookPanel,
+                requestToken: requestWorldbookTokenCountUpdate,
+                syncSystem: syncWorldbookSystemPrompt
+            }
+            : {
+                key: 'discussSessionHistory',
+                messages: () => discussMessages,
+                setMessages: (messages) => { discussMessages = messages; },
+                getCurrentId: () => currentDiscussSessionId,
+                setCurrentId: (id) => { currentDiscussSessionId = id; },
+                countId: 'fmg-discuss-session-count',
+                statusId: 'fmg-discuss-status',
+                title: '讨论最近会话',
+                emptyText: '暂无讨论会话',
+                loadBlocked: () => isDiscussGenerating || isDiscussWorldbookApplying,
+                render: renderDiscussionHistory,
+                updatePanel: updateDiscussPanel,
+                requestToken: requestDiscussTokenCountUpdate,
+                syncSystem: syncDiscussSystemPrompt
+            };
+    }
+
+    function getVisibleChatSessionMessages(messages) {
+        return (messages || [])
+            .filter(message => message && message.role !== 'system' && String(message.content || '').trim())
+            .map(message => ({
+                id: message.id || '',
+                role: message.role,
+                content: String(message.content || '')
+            }));
+    }
+
+    function getChatSessionHistory(type) {
+        const config = getChatSessionConfig(type);
+        if (!Array.isArray(settings[config.key])) {
+            settings[config.key] = [];
+        }
+        return settings[config.key];
+    }
+
+    function getCurrentChatSessionRecords(type) {
+        const charName = window._fmgCharData?.name;
+        if (!charName) return [];
+
+        return getChatSessionHistory(type)
+            .filter(record => record && record.charName === charName)
+            .slice(0, CHAT_SESSION_HISTORY_LIMIT);
+    }
+
+    function createChatSessionId(type) {
+        return `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function getChatSessionPreview(messages, role) {
+        const preferred = [...messages].reverse().find(message => message.role === role && String(message.content || '').trim());
+        const fallback = messages.find(message => String(message.content || '').trim());
+        return String((preferred || fallback)?.content || '').trim();
+    }
+
+    function clipText(text, maxLength) {
+        const value = String(text || '').replace(/\s+/g, ' ').trim();
+        return value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value;
+    }
+
+    function saveChatSession(type) {
+        const config = getChatSessionConfig(type);
+        const charName = window._fmgCharData?.name;
+        if (!charName) return;
+
+        const messages = getVisibleChatSessionMessages(config.messages());
+        const hasUser = messages.some(message => message.role === 'user');
+        const hasAssistant = messages.some(message => message.role === 'assistant');
+        const currentId = config.getCurrentId();
+
+        if (!hasUser || !hasAssistant) {
+            if (currentId && messages.length === 0) {
+                deleteChatSession(type, currentId, true);
+                config.setCurrentId(null);
+            }
+            renderChatSessionControls();
+            return;
+        }
+
+        const id = currentId || createChatSessionId(type);
+        const firstUserText = getChatSessionPreview(messages, 'user');
+        const lastAssistantText = getChatSessionPreview(messages, 'assistant');
+        const now = new Date();
+        const record = {
+            id,
+            charName,
+            title: clipText(firstUserText, 32) || '未命名会话',
+            preview: clipText(lastAssistantText, 72) || clipText(firstUserText, 72),
+            messageCount: messages.length,
+            timestamp: now.toLocaleString('zh-CN'),
+            updatedAt: now.getTime(),
+            messages
+        };
+
+        const history = getChatSessionHistory(type);
+        const otherCharacters = history.filter(item => item.charName !== charName);
+        const sameCharacter = history.filter(item => item.charName === charName && item.id !== id);
+
+        settings[config.key] = [record, ...sameCharacter]
+            .slice(0, CHAT_SESSION_HISTORY_LIMIT)
+            .concat(otherCharacters);
+        config.setCurrentId(id);
+        saveSettings();
+        renderChatSessionControls();
+    }
+
+    function renderChatSessionControls() {
+        ['discuss', 'worldbook'].forEach(type => {
+            const config = getChatSessionConfig(type);
+            const countEl = document.getElementById(config.countId);
+            if (countEl) {
+                countEl.textContent = `${getCurrentChatSessionRecords(type).length}/${CHAT_SESSION_HISTORY_LIMIT}`;
+            }
+        });
+    }
+
+    function renderChatSessionModalBody(type) {
+        const modal = document.getElementById('fmg-chat-session-modal');
+        if (!modal) return;
+
+        const body = modal.querySelector('#fmg-chat-session-body');
+        const loadBtn = modal.querySelector('#fmg-chat-session-load');
+        const sessions = getCurrentChatSessionRecords(type);
+        const currentId = getChatSessionConfig(type).getCurrentId();
+
+        if (!body) return;
+
+        if (sessions.length === 0) {
+            body.innerHTML = `<div class="fmg-discuss-history-empty">${escapeHtml(getChatSessionConfig(type).emptyText)}</div>`;
+            if (loadBtn) loadBtn.disabled = true;
+            renderChatSessionControls();
+            return;
+        }
+
+        body.innerHTML = sessions.map((record, index) => {
+            const checked = record.id === currentId || (!currentId && index === 0);
+            const activeClass = record.id === currentId ? ' active' : '';
+            return `
+                <div class="fmg-discuss-session-card${activeClass}">
+                    <div class="fmg-chat-session-choice-row">
+                        <label class="fmg-chat-session-choice">
+                            <input type="radio" name="fmg-chat-session-choice" value="${escapeHtml(record.id)}" ${checked ? 'checked' : ''}>
+                            <span class="fmg-discuss-session-title">${escapeHtml(record.title || '未命名会话')}</span>
+                        </label>
+                        <button class="fmg-btn-small fmg-btn-danger-small fmg-chat-session-delete" data-session-type="${escapeHtml(type)}" data-session-id="${escapeHtml(record.id)}">删除</button>
+                    </div>
+                    <div class="fmg-discuss-session-header">
+                        <span class="fmg-discuss-session-time">${escapeHtml(record.timestamp || '')}</span>
+                        <span class="fmg-discuss-session-meta">${escapeHtml(String(record.messageCount || 0))} 条消息</span>
+                    </div>
+                    <div class="fmg-discuss-session-preview">${escapeHtml(record.preview || '')}</div>
+                </div>
+            `;
+        }).join('');
+
+        if (loadBtn) loadBtn.disabled = false;
+        renderChatSessionControls();
+    }
+
+    function openChatSessionModal(type) {
+        const config = getChatSessionConfig(type);
+        const existing = document.getElementById('fmg-chat-session-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'fmg-chat-session-modal';
+        modal.dataset.sessionType = type;
+        modal.innerHTML = `
+            <div class="fmg-select-overlay"></div>
+            <div class="fmg-select-content fmg-chat-session-modal-content">
+                <div class="fmg-select-header">
+                    <h4>🕘 ${escapeHtml(config.title)}</h4>
+                    <button class="fmg-close-btn" id="fmg-chat-session-close">×</button>
+                </div>
+                <div class="fmg-select-body fmg-chat-session-modal-body" id="fmg-chat-session-body"></div>
+                <div class="fmg-select-footer">
+                    <span class="fmg-select-info">每个角色保留最近 ${CHAT_SESSION_HISTORY_LIMIT} 个会话</span>
+                    <button class="fmg-btn fmg-btn-primary" id="fmg-chat-session-load">进入所选</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        renderChatSessionModalBody(type);
+    }
+
+    function deleteChatSession(type, sessionId, silent = false) {
+        const config = getChatSessionConfig(type);
+        if (!sessionId) return;
+
+        settings[config.key] = getChatSessionHistory(type).filter(record => record.id !== sessionId);
+        if (config.getCurrentId() === sessionId) {
+            config.setCurrentId(null);
+        }
+
+        saveSettings();
+        renderChatSessionControls();
+        if (!silent && typeof toastr !== 'undefined') {
+            toastr.info('最近会话已删除');
+        }
+    }
+
+    function loadChatSession(type, sessionId) {
+        const config = getChatSessionConfig(type);
+        if (config.loadBlocked()) {
+            showStatus(config.statusId, 'error', '请先等待当前操作完成，再进入历史会话');
+            return;
+        }
+
+        const record = getChatSessionHistory(type).find(item => item.id === sessionId);
+        if (!record) return;
+
+        const messages = (record.messages || [])
+            .filter(message => message && message.role !== 'system')
+            .map(message => ({
+                id: message.id || '',
+                role: message.role,
+                content: String(message.content || '')
+            }));
+
+        if (type === 'discuss') {
+            selectedDiscussWorldbookMessageIds.clear();
+            discussWorldbookSelectionMode = false;
+            ensureChatMessageIds(messages);
+        }
+
+        config.setMessages(messages);
+        config.syncSystem();
+        config.setCurrentId(record.id);
+        config.render();
+        config.updatePanel();
+        config.requestToken();
+        showStatus(config.statusId, 'success', '已进入最近会话');
     }
 
     function pruneDiscussWorldbookSelection() {
@@ -2121,6 +2456,7 @@
 
         // 更新讨论页世界书计数
         updateDiscussWiCount();
+        renderChatSessionControls();
         setDiscussFocusMode(discussFocusMode);
         updateDiscussWorldbookSelectionUI();
         requestDiscussTokenCountUpdate();
@@ -2299,6 +2635,7 @@
             discussMessages = [];
         }
 
+        saveChatSession('discuss');
         renderDiscussionHistory();
 
         const input = document.getElementById('fmg-discuss-input');
@@ -2490,6 +2827,7 @@
         });
 
         updateWorldbookWiCount();
+        renderChatSessionControls();
         updateWorldbookUndoButton();
         setWorldbookFocusMode(worldbookFocusMode);
         requestWorldbookTokenCountUpdate();
@@ -3372,6 +3710,7 @@ ${editableEntriesText}
             worldbookMessages = [];
         }
 
+        saveChatSession('worldbook');
         renderWorldbookHistory();
 
         const input = document.getElementById('fmg-wb-input');
@@ -3388,8 +3727,10 @@ ${editableEntriesText}
         if (isWorldbookGenerating) stopWorldbookGeneration();
 
         worldbookMessages = [];
+        currentWorldbookSessionId = null;
         worldbookAutoScroll = true;
         renderWorldbookHistory();
+        renderChatSessionControls();
 
         const statusEl = document.getElementById('fmg-wb-status');
         if (statusEl) statusEl.style.display = 'none';
@@ -3459,6 +3800,7 @@ ${editableEntriesText}
                 (finalContent) => {
                     appendWorldbookMessage('assistant', finalContent, false);
                     worldbookMessages.push({ role: 'assistant', content: finalContent });
+                    saveChatSession('worldbook');
                     requestWorldbookTokenCountUpdate();
                     finishWorldbookGeneration();
                 },
@@ -3491,6 +3833,7 @@ ${editableEntriesText}
                 const partialContent = textEl.textContent;
                 textEl.innerHTML = renderWorldbookAssistantContent(partialContent);
                 worldbookMessages.push({ role: 'assistant', content: partialContent });
+                saveChatSession('worldbook');
                 requestWorldbookTokenCountUpdate();
             }
         }
@@ -4070,6 +4413,7 @@ ${editableEntriesText}
                     const assistantMessage = createChatMessage('assistant', finalContent);
                     discussMessages.push(assistantMessage);
                     appendChatMessage('assistant', finalContent, false, assistantMessage.id);
+                    saveChatSession('discuss');
                     requestDiscussTokenCountUpdate();
                     finishDiscussGeneration();
                 },
@@ -4100,6 +4444,7 @@ ${editableEntriesText}
             const textEl = streaming.querySelector('.fmg-chat-text');
             if (textEl && textEl.textContent.trim()) {
                 discussMessages.push(createChatMessage('assistant', textEl.textContent));
+                saveChatSession('discuss');
                 requestDiscussTokenCountUpdate();
                 renderDiscussionHistory();
             }
@@ -4125,11 +4470,13 @@ ${editableEntriesText}
         if (isDiscussGenerating) stopDiscussGeneration();
 
         discussMessages = [];
+        currentDiscussSessionId = null;
         discussAutoScroll = true;
         selectedDiscussWorldbookMessageIds.clear();
         discussWorldbookSelectionMode = false;
         renderDiscussionHistory();
         requestDiscussTokenCountUpdate();
+        renderChatSessionControls();
 
         const statusEl = document.getElementById('fmg-discuss-status');
         if (statusEl) statusEl.style.display = 'none';
