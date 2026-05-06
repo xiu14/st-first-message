@@ -2975,7 +2975,7 @@ ${editableEntriesText}
 3. 条目块必须使用下面的精确格式，不要使用 markdown 代码块包裹：
 [WORLDBOOK_ENTRY]
 {
-  "uid": 15,
+  "operation": "create",
   "comment": "条目标题或备注",
   "keys": ["主关键词1", "主关键词2"],
   "secondary_keys": ["次级关键词"],
@@ -2989,10 +2989,11 @@ ${editableEntriesText}
   "insertion_order": 100
 }
 [/WORLDBOOK_ENTRY]
-4. 如果是更新已有条目，必须填写 "uid" 为对应条目的 id；如果是新建条目，不要填写 uid。
-5. 如果条目应当常驻，请将 "constant" 设为 true，并将 "keys" 设为空数组。
-6. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
-7. "position" 可用值有：
+4. 如果是新建条目，"operation" 必须是 "create"，并且不要填写 uid。
+5. 只有在更新已有条目时，"operation" 才能是 "update"，并且必须填写 "uid" 为对应条目的 id。
+6. 如果条目应当常驻，请将 "constant" 设为 true，并将 "keys" 设为空数组。
+7. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
+8. "position" 可用值有：
    - "before_char": 放在角色定义前的普通世界书
    - "after_char": 放在角色定义后的普通世界书
    - "before_author_note": 放在作者注前
@@ -3001,21 +3002,21 @@ ${editableEntriesText}
    - "after_example_messages": 放在示例对话后
    - "at_depth": 作为 depth 注入，此时还要提供 "depth" 和 "role"
    - "outlet": 发送到指定 outlet，此时还要提供 "outlet_name"
-8. 当 position 为 "at_depth" 时：
+9. 当 position 为 "at_depth" 时：
    - "depth" 必须是数字，默认可用 4
    - "role" 只能是 "system"、"user"、"assistant"
-9. 当 position 为 "outlet" 时，必须提供 "outlet_name"。
-10. 请同时给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
-11. 如果用户要求你“帮我判断这个条目应该放在哪里”，你要主动分析它更适合普通世界书、作者注附近、depth 注入还是 outlet，并在输出条目块时填好对应字段。
-12. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-13. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
+10. 当 position 为 "outlet" 时，必须提供 "outlet_name"。
+11. 请同时给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
+12. 如果用户要求你“帮我判断这个条目应该放在哪里”，你要主动分析它更适合普通世界书、作者注附近、depth 注入还是 outlet，并在输出条目块时填好对应字段。
+13. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
+14. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
    - 字符串值必须使用英文双引号包裹
    - 字符串内部如果需要换行，必须写成 \\n，不要直接在字符串中换行
    - 字符串内部如果需要英文双引号，必须写成 \\\"
    - 最后一个字段或数组元素后面不要加逗号
-14. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写对应 uid，不要反问用户去查 uid。
-15. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
-16. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
+15. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写 operation="update" 和对应 uid，不要反问用户去查 uid。
+16. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
+17. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
     }
 
     function stripDiscussMessageBlocks(content) {
@@ -3065,6 +3066,7 @@ ${editableEntriesText}
                 : deriveWorldbookKeysFromDiscuss(comment, cleanedContent);
 
             return {
+                operation: 'create',
                 uid: null,
                 comment,
                 keys,
@@ -3285,6 +3287,10 @@ ${editableEntriesText}
     }
 
     const WORLDBOOK_ENTRY_JSON_FIELDS = [
+        'operation',
+        'action',
+        'mode',
+        'update',
         'uid',
         'comment',
         'title',
@@ -3347,7 +3353,7 @@ ${editableEntriesText}
             return Number.isFinite(numericValue) ? numericValue : undefined;
         }
 
-        if (normalizedField === 'constant' || normalizedField === 'selective' || normalizedField === 'enabled') {
+        if (normalizedField === 'constant' || normalizedField === 'selective' || normalizedField === 'enabled' || normalizedField === 'update') {
             const booleanText = value.replace(/^['"]|['"]$/g, '').trim().toLowerCase();
             if (booleanText === 'true') return true;
             if (booleanText === 'false') return false;
@@ -3458,6 +3464,14 @@ ${editableEntriesText}
         }
     }
 
+    function normalizeWorldbookOperation(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized === 'update' || normalized === 'edit' || normalized === 'modify' || normalized === '更新') {
+            return 'update';
+        }
+        return 'create';
+    }
+
     function parseWorldbookEntryBlocks(text) {
         const regex = /\[(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]([\s\S]*?)\[\/(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]/g;
         const entries = [];
@@ -3475,8 +3489,17 @@ ${editableEntriesText}
                     throw new Error('缺少 content 字段');
                 }
 
+                const operation = normalizeWorldbookOperation(
+                    parsed.operation ?? parsed.action ?? parsed.mode ?? (parsed.update === true ? 'update' : 'create')
+                );
+                const parsedUid = Number.isFinite(Number(parsed.uid)) ? Number(parsed.uid) : null;
+                if (operation === 'update' && parsedUid === null) {
+                    throw new Error('operation 为 update 时必须提供 uid');
+                }
+
                 entries.push({
-                    uid: Number.isFinite(Number(parsed.uid)) ? Number(parsed.uid) : null,
+                    operation,
+                    uid: operation === 'update' ? parsedUid : null,
                     comment: String(parsed.comment || parsed.title || parsed.name || keys[0] || '未命名条目').trim(),
                     keys: keys,
                     secondary_keys: secondaryKeys,
@@ -3610,6 +3633,7 @@ ${editableEntriesText}
             const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
             if (!entry.invalid) {
                 window._fmgPendingWorldbookEntries[entryKey] = {
+                    operation: entry.operation,
                     uid: entry.uid,
                     comment: entry.comment,
                     keys: entry.keys,
@@ -3906,7 +3930,42 @@ ${editableEntriesText}
         };
     }
 
+    let worldbookSaveQueue = Promise.resolve();
+
+    async function loadWorldInfoDataForSave(context, worldName) {
+        const headers = typeof context.getRequestHeaders === 'function'
+            ? context.getRequestHeaders()
+            : { 'Content-Type': 'application/json' };
+
+        try {
+            const response = await fetch('/api/worldinfo/get', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ name: worldName })
+            });
+
+            if (response.ok) {
+                return await response.json();
+            }
+
+            console.warn('[开场白生成器] 保存前刷新世界书失败，改用上下文接口:', response.status);
+        } catch (error) {
+            console.warn('[开场白生成器] 保存前刷新世界书失败，改用上下文接口:', error);
+        }
+
+        return await context.loadWorldInfo(worldName);
+    }
+
     async function persistWorldbookEntry(entryData) {
+        const queuedSave = worldbookSaveQueue
+            .catch(() => {})
+            .then(() => persistWorldbookEntryUnlocked(entryData));
+
+        worldbookSaveQueue = queuedSave.catch(() => {});
+        return queuedSave;
+    }
+
+    async function persistWorldbookEntryUnlocked(entryData) {
         const context = SillyTavern.getContext();
         if (context.characterId === undefined) throw new Error('未选择角色');
 
@@ -3920,13 +3979,24 @@ ${editableEntriesText}
             throw new Error('当前 ST 上下文缺少世界书保存接口');
         }
 
-        const loadedData = await context.loadWorldInfo(worldName);
+        const loadedData = await loadWorldInfoDataForSave(context, worldName);
         const worldEntries = loadedData?.entries ? Object.values(loadedData.entries) : [];
-        const requestedUid = Number.isFinite(Number(entryData.uid)) ? Number(entryData.uid) : null;
-        let targetEntry = requestedUid !== null
-            ? worldEntries.find(entry => Number(entry.uid) === requestedUid)
-            : null;
-        const isUpdate = !!targetEntry;
+        const shouldUpdate = entryData.operation === 'update';
+        const requestedUid = shouldUpdate && Number.isFinite(Number(entryData.uid)) ? Number(entryData.uid) : null;
+        let targetEntry = null;
+        let isUpdate = false;
+
+        if (shouldUpdate) {
+            if (requestedUid === null) {
+                throw new Error('更新世界书条目时缺少有效 uid');
+            }
+
+            targetEntry = worldEntries.find(entry => Number(entry.uid) === requestedUid);
+            if (!targetEntry) {
+                throw new Error(`找不到要更新的世界书条目 #${requestedUid}`);
+            }
+            isUpdate = true;
+        }
 
         if (!targetEntry) {
             targetEntry = createWorldbookEntryShell(worldEntries);
@@ -3962,8 +4032,12 @@ ${editableEntriesText}
             throw new Error('position 为 outlet 时必须提供 outlet_name');
         }
 
-        const finalFormat = { entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry])) };
+        const finalFormat = {
+            ...(loadedData && typeof loadedData === 'object' ? loadedData : {}),
+            entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry]))
+        };
         await context.saveWorldInfo(worldName, finalFormat);
+        await syncWorldInfoDisplay(worldName, finalFormat);
         if (typeof context.reloadWorldInfoEditor === 'function') {
             context.reloadWorldInfoEditor(worldName, true);
         }
