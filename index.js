@@ -43,7 +43,18 @@
         mes_example: '对话示例',
         system_prompt: '系统提示词',
         post_history_instructions: '越权提示词',
-        creator_notes: '创作者备注'
+        creator_notes: '创作者备注',
+        alternate_greetings: '可选开场白',
+        tags: '标签',
+        creator: '创作者',
+        character_version: '版本',
+        spec: '规格',
+        spec_version: '规格版本',
+        extensions: '扩展数据',
+        depth_prompt: '深度提示词',
+        'extensions.depth_prompt': '深度提示词',
+        talkativeness: '对话积极性',
+        'extensions.talkativeness': '对话积极性'
     };
 
     // 字段名到 _fmgCharData 缓存键的映射
@@ -55,8 +66,31 @@
         mes_example: 'mes_example',
         system_prompt: 'system_prompt',
         post_history_instructions: 'post_history_instructions',
-        creator_notes: 'creator_notes'
+        creator_notes: 'creator_notes',
+        alternate_greetings: 'alternate_greetings',
+        tags: 'tags',
+        creator: 'creator',
+        character_version: 'character_version',
+        spec: 'spec',
+        spec_version: 'spec_version',
+        extensions: 'extensions',
+        depth_prompt: 'depth_prompt',
+        'extensions.depth_prompt': 'depth_prompt',
+        talkativeness: 'talkativeness',
+        'extensions.talkativeness': 'talkativeness'
     };
+
+    const EDIT_FIELD_ALIASES = {
+        desc: 'description',
+        pers: 'personality',
+        scen: 'scenario',
+        first: 'first_mes',
+        creatorcomment: 'creator_notes',
+        depth_prompt: 'extensions.depth_prompt',
+        talkativeness: 'extensions.talkativeness'
+    };
+
+    const TOP_LEVEL_CHARACTER_FIELDS = new Set(['description', 'personality', 'scenario', 'first_mes', 'mes_example']);
 
     const WORLDBOOK_POSITIONS = {
         before: 0,
@@ -2506,7 +2540,13 @@
 修改后的完整内容
 [/EDIT]
 
-支持的字段名：description, personality, scenario, first_mes, mes_example, system_prompt, post_history_instructions, creator_notes
+常用字段名：description, personality, scenario, first_mes, alternate_greetings, mes_example, system_prompt, post_history_instructions, creator_notes, tags, creator, character_version, extensions.depth_prompt
+如果要修改没有列出的角色卡 data 字段，也可以直接使用字段名或字段路径，例如：
+- [EDIT:extensions.depth_prompt]
+- [EDIT:extensions.talkativeness]
+- [EDIT:tags]
+
+数组或对象字段请输出完整 JSON，例如 tags 使用 ["标签1","标签2"]，alternate_greetings 使用 ["开场白1","开场白2"]。
 
 示例（小改 - 修改单个字段）：
 我建议将描述修改为以下内容：
@@ -2656,21 +2696,125 @@
     let _editIdCounter = 0;
 
     function parseEditBlocks(text) {
-        const regex = /\[EDIT:(\w+)\]([\s\S]*?)\[\/EDIT\]/g;
+        const regex = /\[EDIT:([^\]\s]+)\]([\s\S]*?)\[\/EDIT\]/g;
         const edits = [];
         let match;
         while ((match = regex.exec(text)) !== null) {
-            const field = match[1];
-            if (FIELD_LABELS[field]) {
-                edits.push({
-                    field: field,
-                    content: match[2].trim(),
-                    start: match.index,
-                    end: regex.lastIndex
-                });
-            }
+            const field = normalizeEditFieldName(match[1]);
+            if (!field) continue;
+
+            edits.push({
+                field: field,
+                content: match[2].trim(),
+                start: match.index,
+                end: regex.lastIndex
+            });
         }
         return edits;
+    }
+
+    function normalizeEditFieldName(field) {
+        const normalized = String(field || '').trim().replace(/\[(\w+)\]/g, '.$1');
+        if (!normalized) return '';
+
+        const withoutDataPrefix = normalized.startsWith('data.')
+            ? normalized.slice('data.'.length)
+            : normalized;
+        const aliased = EDIT_FIELD_ALIASES[withoutDataPrefix] || withoutDataPrefix;
+        const segments = aliased.split('.').filter(Boolean);
+
+        if (segments.length === 0) return '';
+        if (segments.some(segment => !/^[A-Za-z0-9_-]+$/.test(segment))) return '';
+        if (segments.some(segment => ['__proto__', 'prototype', 'constructor'].includes(segment))) return '';
+
+        return segments.join('.');
+    }
+
+    function getEditFieldLabel(field) {
+        return FIELD_LABELS[field] || FIELD_LABELS[field?.split('.')?.pop()] || field;
+    }
+
+    function getNestedValue(source, path) {
+        if (!source || !path) return undefined;
+        return path.split('.').reduce((value, key) => {
+            if (value === undefined || value === null) return undefined;
+            return value[key];
+        }, source);
+    }
+
+    function setNestedValue(target, path, value) {
+        const segments = path.split('.').filter(Boolean);
+        if (segments.length === 0) return;
+
+        let cursor = target;
+        for (let i = 0; i < segments.length - 1; i++) {
+            const key = segments[i];
+            if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key])) {
+                cursor[key] = {};
+            }
+            cursor = cursor[key];
+        }
+        cursor[segments[segments.length - 1]] = value;
+    }
+
+    function buildNestedDataPayload(path, value, existingData) {
+        const segments = path.split('.').filter(Boolean);
+        if (segments.length === 0) return {};
+        if (segments.length === 1) return { [segments[0]]: value };
+
+        const rootKey = segments[0];
+        const rootClone = existingData?.[rootKey] && typeof existingData[rootKey] === 'object'
+            ? structuredClone(existingData[rootKey])
+            : {};
+        setNestedValue(rootClone, segments.slice(1).join('.'), value);
+        return { [rootKey]: rootClone };
+    }
+
+    function parseEditFieldValue(field, rawValue, currentValue) {
+        const text = String(rawValue ?? '').trim();
+        const expectsJson = Array.isArray(currentValue)
+            || (currentValue && typeof currentValue === 'object')
+            || ['tags', 'alternate_greetings', 'extensions'].includes(field);
+
+        if (expectsJson || /^[\[{]/.test(text)) {
+            try {
+                return JSON.parse(text);
+            } catch (_) {
+                if (Array.isArray(currentValue) || ['tags', 'alternate_greetings'].includes(field)) {
+                    return text
+                        .split(/\n|,/)
+                        .map(item => item.trim())
+                        .filter(Boolean);
+                }
+            }
+        }
+
+        if (typeof currentValue === 'boolean') {
+            return ['true', '1', 'yes', '是', '开启'].includes(text.toLowerCase());
+        }
+
+        if (typeof currentValue === 'number' && Number.isFinite(Number(text))) {
+            return Number(text);
+        }
+
+        return rawValue;
+    }
+
+    function formatEditFieldValue(value) {
+        if (value === undefined || value === null || value === '') return '（空）';
+        if (typeof value === 'object') {
+            return JSON.stringify(value, null, 2);
+        }
+        return String(value);
+    }
+
+    function getCharacterDataFieldValue(field) {
+        const charData = window._fmgCharData;
+        if (!charData) return undefined;
+
+        const cacheKey = FIELD_TO_CACHE_KEY[field] || field;
+        if (charData[cacheKey] !== undefined) return charData[cacheKey];
+        return getNestedValue(charData._raw, field);
     }
 
     function renderAssistantContent(content) {
@@ -2705,10 +2849,8 @@
     }
 
     function renderEditCard(edit, editKey) {
-        const fieldLabel = FIELD_LABELS[edit.field] || edit.field;
-        const charData = window._fmgCharData;
-        const cacheKey = FIELD_TO_CACHE_KEY[edit.field] || edit.field;
-        const currentValue = charData ? (charData[cacheKey] || '（空）') : '（无角色数据）';
+        const fieldLabel = getEditFieldLabel(edit.field);
+        const currentValue = window._fmgCharData ? getCharacterDataFieldValue(edit.field) : '（无角色数据）';
 
         return `
             <div class="fmg-edit-card" data-edit-key="${editKey}">
@@ -2717,7 +2859,7 @@
                 </div>
                 <div class="fmg-edit-card-old">
                     <div class="fmg-edit-card-label">📄 当前值 <span class="fmg-collapse-arrow">▶</span></div>
-                    <div class="fmg-edit-card-old-content">${escapeHtml(currentValue)}</div>
+                    <div class="fmg-edit-card-old-content">${escapeHtml(formatEditFieldValue(currentValue))}</div>
                 </div>
                 <div class="fmg-edit-card-new">
                     <div class="fmg-edit-card-label-static">✨ 建议修改为</div>
@@ -2739,10 +2881,18 @@
             const char = context.characters[context.characterId];
             if (!char) throw new Error('角色数据不存在');
 
-            // 更新内存中的数据
-            if (char.data) char.data[field] = newValue;
-            const topLevelFields = ['description', 'personality', 'scenario', 'first_mes', 'mes_example'];
-            if (topLevelFields.includes(field)) char[field] = newValue;
+            if (!char.data) char.data = {};
+
+            const dataPath = normalizeEditFieldName(field);
+            if (!dataPath) throw new Error('字段名无效');
+
+            const currentValue = getNestedValue(char.data, dataPath);
+            const parsedValue = parseEditFieldValue(dataPath, newValue, currentValue);
+
+            setNestedValue(char.data, dataPath, parsedValue);
+            if (TOP_LEVEL_CHARACTER_FIELDS.has(dataPath)) {
+                char[dataPath] = parsedValue;
+            }
 
             // 调用 SillyTavern API 保存
             const headers = typeof context.getRequestHeaders === 'function'
@@ -2754,7 +2904,7 @@
                 headers: headers,
                 body: JSON.stringify({
                     avatar: char.avatar,
-                    data: { [field]: newValue }
+                    data: buildNestedDataPayload(dataPath, parsedValue, char.data)
                 })
             });
 
@@ -2764,10 +2914,23 @@
             }
 
             // 更新缓存
-            const cacheKey = FIELD_TO_CACHE_KEY[field] || field;
+            const cacheKey = FIELD_TO_CACHE_KEY[dataPath] || dataPath;
             if (window._fmgCharData) {
-                window._fmgCharData[cacheKey] = newValue;
-                if (window._fmgCharData._raw) window._fmgCharData._raw[field] = newValue;
+                if (!window._fmgCharData._raw) window._fmgCharData._raw = {};
+                setNestedValue(window._fmgCharData._raw, dataPath, parsedValue);
+
+                if (cacheKey.includes('.')) {
+                    setNestedValue(window._fmgCharData, cacheKey, parsedValue);
+                } else {
+                    window._fmgCharData[cacheKey] = parsedValue;
+                }
+
+                if (dataPath.startsWith('extensions.')) {
+                    window._fmgCharData.extensions = window._fmgCharData._raw.extensions || {};
+                    const extensionKey = dataPath.split('.').slice(1).join('.');
+                    if (extensionKey === 'depth_prompt') window._fmgCharData.depth_prompt = parsedValue;
+                    if (extensionKey === 'talkativeness') window._fmgCharData.talkativeness = parsedValue;
+                }
             }
 
             // 更新卡片状态
@@ -2781,7 +2944,7 @@
             }
 
             updateDiscussPanel();
-            if (typeof toastr !== 'undefined') toastr.success(`${FIELD_LABELS[field] || field} 已更新`);
+            if (typeof toastr !== 'undefined') toastr.success(`${getEditFieldLabel(dataPath)} 已更新`);
 
         } catch (e) {
             console.error('[开场白生成器] 应用修改失败:', e);
