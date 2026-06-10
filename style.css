@@ -1798,6 +1798,36 @@
     gap: 12px;
 }
 
+.fmg-sb-style-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.fmg-sb-style-row label {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 12px;
+    color: var(--SmartThemeBodyColor, #ccc);
+}
+
+.fmg-sb-style-select {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    background: var(--SmartThemeBlurTintColor, #151528);
+    color: var(--SmartThemeBodyColor, #fff);
+    font-size: 12px;
+}
+
+.fmg-sb-style-select:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor, #7c7cff);
+}
+
 .fmg-sb-preview-section {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.1);

@@ -29,7 +29,9 @@
         firstMessageHistory: [],
         // 讨论/世界书最近会话（每个角色每类最多3条）
         discussSessionHistory: [],
-        worldbookSessionHistory: []
+        worldbookSessionHistory: [],
+        // 状态栏设计方向
+        statusBarStyle: 'director'
     };
 
     let settings = { ...DEFAULT_SETTINGS };
@@ -469,6 +471,19 @@
                         <!-- 需求输入 -->
                         <div class="fmg-section">
                             <label>✍️ 描述你想要的状态栏</label>
+                            <div class="fmg-sb-style-row">
+                                <label for="fmg-sb-style">风格方向</label>
+                                <select id="fmg-sb-style" class="fmg-sb-style-select">
+                                    <option value="director">自由导演</option>
+                                    <option value="sms">短信气泡</option>
+                                    <option value="dossier">精致档案卡</option>
+                                    <option value="hud">玻璃 HUD</option>
+                                    <option value="minimal">极简状态牌</option>
+                                    <option value="notebook">手账纸条</option>
+                                    <option value="terminal">赛博终端</option>
+                                    <option value="ritual">神秘仪式</option>
+                                </select>
+                            </div>
                             <textarea id="fmg-sb-prompt" class="fmg-textarea" 
                                 placeholder="描述你想要的状态栏样式和内容...&#10;例如：包含日期、时间、地点、心情、穿着，用羊皮纸风格美化"></textarea>
                         </div>
@@ -682,6 +697,10 @@
         document.addEventListener('change', (e) => {
             if (e.target.id === 'fmg-inc-preset') {
                 settings.includePresetPrompts = e.target.checked;
+                saveSettings();
+            }
+            if (e.target.id === 'fmg-sb-style') {
+                settings.statusBarStyle = e.target.value || 'director';
                 saveSettings();
             }
         });
@@ -1139,6 +1158,7 @@
     function openPopup() {
         document.getElementById('fmg-overlay').classList.add('show');
         document.getElementById('fmg-popup').classList.add('show');
+        updateStatusBarStyleControl();
         loadCharacterData();
         renderHistoryList();
     }
@@ -1168,7 +1188,17 @@
         document.querySelectorAll('.fmg-tab-content').forEach(content => {
             content.classList.toggle('active', content.dataset.tab === tabName);
         });
+        if (tabName === 'statusbar') {
+            updateStatusBarStyleControl();
+        }
         renderChatSessionControls();
+    }
+
+    function updateStatusBarStyleControl() {
+        const styleSelect = document.getElementById('fmg-sb-style');
+        if (styleSelect) {
+            styleSelect.value = settings.statusBarStyle || 'director';
+        }
     }
 
     // ========================================
@@ -4319,6 +4349,56 @@ ${editableEntriesText}
         if (statusEl) statusEl.style.display = 'none';
     }
 
+    function getStatusBarDesignBrief(styleKey) {
+        const briefs = {
+            director: {
+                name: '自由导演',
+                direction: '根据角色气质、场景和用户需求自行选择最贴切的视觉语言，但必须有清晰层级、克制配色和完整 UI 感。',
+                motifs: '可以自由选择材质、排版和装饰，但所有装饰都必须服务于信息阅读。'
+            },
+            sms: {
+                name: '短信气泡',
+                direction: '像手机短信或聊天通知里的精致状态摘要，轻量、亲密、可读，适合现代、私密、日常叙事。',
+                motifs: '气泡、时间戳、联系人小标签、细分信息条、柔和分隔线。'
+            },
+            dossier: {
+                name: '精致档案卡',
+                direction: '像人物档案、任务简报或机构记录卡，信息密度高但秩序清楚，适合设定复杂的角色。',
+                motifs: '编号、档案头、细线网格、字段组、印章式小标签。'
+            },
+            hud: {
+                name: '玻璃 HUD',
+                direction: '像半透明界面叠层，轻盈、冷静、有空间感，适合科幻、都市、监控或能力状态。',
+                motifs: '半透明面板、细描边、弱发光、坐标式信息组。'
+            },
+            minimal: {
+                name: '极简状态牌',
+                direction: '尽量少的装饰和清楚的排版，用留白、字号层级和细线让状态栏显得高级。',
+                motifs: '单一主标题、两列信息、细分割线、小号注释。'
+            },
+            notebook: {
+                name: '手账纸条',
+                direction: '像角色随身记录、日记摘录或贴纸手账，温柔但不能杂乱，适合生活感与情绪细节。',
+                motifs: '纸张质感、手写感标题、短标签、便签边角、轻微阴影。'
+            },
+            terminal: {
+                name: '赛博终端',
+                direction: '像终端读数、系统监控或黑箱记录，但要精密克制，避免廉价霓虹。',
+                motifs: '等宽小字、扫描线、状态码、低饱和强调色、模块读数。'
+            },
+            ritual: {
+                name: '神秘仪式',
+                direction: '像咒文记录、占卜盘或隐秘档案，氛围感强但结构要清楚，适合奇幻、神秘、恐怖。',
+                motifs: '细边框、符号感分隔、低饱和金属色、铭文式标题、环形或轴线布局。'
+            }
+        };
+
+        const brief = briefs[styleKey] || briefs.director;
+        return `风格方向：${brief.name}
+视觉方向：${brief.direction}
+可借用元素：${brief.motifs}`;
+    }
+
     async function generateStatusBar() {
         const promptInput = document.getElementById('fmg-sb-prompt');
         const userPrompt = promptInput.value.trim();
@@ -4346,14 +4426,20 @@ ${editableEntriesText}
             const wiText = worldInfo.length > 0
                 ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
                 : '无世界书条目';
+            const styleKey = document.getElementById('fmg-sb-style')?.value || settings.statusBarStyle || 'director';
+            settings.statusBarStyle = styleKey;
+            saveSettings();
+            const designBrief = getStatusBarDesignBrief(styleKey);
 
-            const systemPrompt = `你是一个专业的 SillyTavern 状态栏设计师。根据用户的需求，生成状态栏的世界书条目内容和正则脚本。
+            const systemPrompt = `你是一个专业的 SillyTavern 状态栏设计师和前端视觉导演。你的任务不是套模板，而是根据角色气质、用户需求和风格方向，创作一个有审美判断的状态栏 UI。
 
 当前角色: ${charData.name}
 角色描述: ${charData.desc || '（空）'}
 角色性格: ${charData.pers || '（空）'}
 角色场景: ${charData.scen || '（空）'}
 世界书设定: ${wiText}
+
+${designBrief}
 
 你必须返回一个严格的 JSON 对象，不要包含任何其他文字，格式如下:
 {
@@ -4366,16 +4452,35 @@ ${editableEntriesText}
 
 重要规则:
 1. worldbook_content 必须包含指导说明和模板。指导说明必须明确要求在回复末尾输出状态栏；模板必须且只能包含一个 <status_block>...</status_block> 包裹，内部使用 <status>...</status> 定义各个字段
-2. 状态栏字段用 XML 标签如 <title>, <date>, <time>, <location>, <mood> 等
+2. 状态栏字段用 XML 标签如 <title>, <date>, <time>, <location>, <mood> 等。字段数量控制在 5-8 个，必须覆盖核心状态，不要堆太多碎字段
 3. regex_find 必须能匹配整个 status 块的内容，使用捕获组提取各字段，且必须满足以下严格技术约束：
    - 不要使用 (?s) 或结尾的 /s 标志
    - 若需匹配包含换行符在内的任意字符，请统一使用 [\\s\\S]*? 代替 .*?
    - 必须对所有的正斜杠（/）进行反斜杠转义（即写成 \\/）
    - 请使用非贪婪模式，防止匹配越界
-4. regex_replace 使用 $1, $2 等引用捕获组，生成精美的 HTML/CSS 状态栏
+4. regex_replace 使用 $1, $2 等引用捕获组，生成精美的 HTML/CSS 状态栏。HTML/CSS 必须是一个完整 UI，而不是普通列表
 5. regex_trim 列出需要从显示中移除的标签
-6. CSS 样式应该内联在 HTML 中，使用深色主题配色
-7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记`;
+6. CSS 样式必须内联在 HTML 中，默认适配 SillyTavern 深色主题，但可以根据风格方向使用克制的浅色、纸张、玻璃或终端质感
+7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记
+
+高级设计标准:
+1. 必须有明确的信息层级：主标题/主状态最醒目，时间地点等辅助信息次一级，细节说明最低一级
+2. 必须有一个视觉焦点，不要所有字段同等重量
+3. 使用 CSS 变量组织颜色和间距，例如 --sb-bg、--sb-line、--sb-accent、--sb-muted
+4. 最多使用 2 种强调色，避免彩虹渐变、大面积霓虹、过强发光、廉价金属质感
+5. 不要依赖 emoji 作为主要装饰；如果使用符号，必须少量且符合风格
+6. 排版要适合 320px 宽度：允许换行，不能横向溢出，不能用固定大宽度
+7. 所有字段都要有稳定 class 名，便于后续调整；class 使用 sb- 前缀
+8. 可以有创意布局，但必须保证一眼能读懂当前时间、地点、状态和情绪
+9. 不要输出“黑底+亮边框+几行文字”的低完成度状态栏
+10. 不要把状态栏做成一堆独立小卡片；它应该像一个统一的界面组件
+
+生成前请在内部自检，只有当以下 5 项都达标才输出 JSON：
+- 是否符合所选风格方向而不是泛泛深色卡片
+- 是否像完整 UI 而不是文字列表
+- 是否有清楚的视觉层级和统一配色
+- 是否移动端不溢出
+- 是否世界书模板字段与 regex_find 捕获组完全对应`;
 
             const userMessage = `请为角色"${charData.name}"生成状态栏，需求如下：\n${userPrompt}`;
 
