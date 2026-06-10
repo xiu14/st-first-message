@@ -4399,6 +4399,113 @@ ${editableEntriesText}
 可借用元素：${brief.motifs}`;
     }
 
+    function stripMarkdownFence(text) {
+        let cleaned = String(text || '').trim();
+        if (!cleaned.startsWith('```')) return cleaned;
+
+        cleaned = cleaned.replace(/^```(?:json|javascript|js)?\s*/i, '').trim();
+        return cleaned.replace(/\s*```$/i, '').trim();
+    }
+
+    function extractBalancedJsonObject(text) {
+        const source = stripMarkdownFence(text);
+        const start = source.indexOf('{');
+        if (start < 0) return source;
+
+        let depth = 0;
+        let inString = false;
+        let quote = '';
+        let escaped = false;
+
+        for (let i = start; i < source.length; i++) {
+            const ch = source[i];
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch === '\\') {
+                    escaped = true;
+                } else if (ch === quote) {
+                    inString = false;
+                    quote = '';
+                }
+                continue;
+            }
+
+            if (ch === '"' || ch === "'") {
+                inString = true;
+                quote = ch;
+                continue;
+            }
+            if (ch === '{') depth++;
+            if (ch === '}') {
+                depth--;
+                if (depth === 0) return source.slice(start, i + 1).trim();
+            }
+        }
+
+        return source.slice(start).trim();
+    }
+
+    function normalizeLooseStatusBarValue(rawValue) {
+        let value = String(rawValue || '').trim();
+        if (value.endsWith(',')) value = value.slice(0, -1).trim();
+
+        const quote = value[0];
+        const hasWrappingQuote = (quote === '"' || quote === "'") && value[value.length - 1] === quote;
+        if (hasWrappingQuote) {
+            value = value.slice(1, -1);
+        }
+
+        return value
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\'/g, "'")
+            .trim();
+    }
+
+    function parseLooseStatusBarResult(text) {
+        const source = extractBalancedJsonObject(text);
+        const fields = ['worldbook_content', 'regex_name', 'regex_find', 'regex_replace', 'regex_trim'];
+        const positions = fields
+            .map(field => {
+                const pattern = new RegExp(`["']?${field}["']?\\s*:`, 'i');
+                const match = pattern.exec(source);
+                return match ? { field, start: match.index, valueStart: match.index + match[0].length } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.start - b.start);
+
+        if (!positions.length) {
+            throw new Error('未找到状态栏结果字段');
+        }
+
+        const result = {};
+        for (let i = 0; i < positions.length; i++) {
+            const current = positions[i];
+            const next = positions[i + 1];
+            const valueEnd = next ? next.start : source.lastIndexOf('}');
+            const rawValue = source.slice(current.valueStart, valueEnd >= 0 ? valueEnd : undefined);
+            result[current.field] = normalizeLooseStatusBarValue(rawValue);
+        }
+
+        return result;
+    }
+
+    function parseStatusBarResult(text) {
+        const candidate = extractBalancedJsonObject(text);
+        try {
+            return JSON.parse(candidate);
+        } catch (strictError) {
+            const loose = parseLooseStatusBarResult(candidate);
+            if (!loose.worldbook_content || !loose.regex_find || !loose.regex_replace) {
+                throw strictError;
+            }
+            return loose;
+        }
+    }
+
     async function generateStatusBar() {
         const promptInput = document.getElementById('fmg-sb-prompt');
         const userPrompt = promptInput.value.trim();
@@ -4462,6 +4569,7 @@ ${designBrief}
 5. regex_trim 列出需要从显示中移除的标签
 6. CSS 样式必须内联在 HTML 中，默认适配 SillyTavern 深色主题，但可以根据风格方向使用克制的浅色、纸张、玻璃或终端质感
 7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记
+8. JSON 字符串内部不能出现未转义的真实换行，必须使用 \\n；HTML 属性请优先使用单引号，避免破坏 JSON 字符串
 
 高级设计标准:
 1. 必须有明确的信息层级：主标题/主状态最醒目，时间地点等辅助信息次一级，细节说明最低一级
@@ -4490,12 +4598,7 @@ ${designBrief}
                 (content) => { fullContent = content; },
                 (finalContent) => {
                     try {
-                        // 清理可能的 markdown 代码块包裹
-                        let cleaned = finalContent.trim();
-                        if (cleaned.startsWith('```')) {
-                            cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-                        }
-                        const result = JSON.parse(cleaned);
+                        const result = parseStatusBarResult(finalContent);
                         window._fmgStatusBarResult = result;
 
                         // 填充预览区代码
