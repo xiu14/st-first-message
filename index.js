@@ -22,6 +22,8 @@
         includeScenario: true,
         includeCurrentFirstMes: true,
         selectedWorldEntries: [],
+        worldInfoSelectionsByScope: {},
+        worldInfoSelectionInitializedByScope: {},
         // 预设条目相关
         includePresetPrompts: false,
         selectedPresetPrompts: [],
@@ -35,6 +37,7 @@
     };
 
     let settings = { ...DEFAULT_SETTINGS };
+    let currentWorldInfoSelectionScope = 'global';
 
     // 可编辑字段标签映射
     const FIELD_LABELS = {
@@ -226,8 +229,7 @@
             
             <div class="fmg-tabs">
                 <button class="fmg-tab active" data-tab="generate">生成</button>
-                <button class="fmg-tab" data-tab="discuss">讨论</button>
-                <button class="fmg-tab" data-tab="worldbook">世界书</button>
+                <button class="fmg-tab" data-tab="discuss">讨论/世界书</button>
                 <button class="fmg-tab" data-tab="statusbar">状态栏</button>
                 <button class="fmg-tab" data-tab="api">API</button>
             </div>
@@ -382,12 +384,12 @@
                         <div class="fmg-chat-messages" id="fmg-chat-messages">
                             <div class="fmg-chat-welcome">
                                 <div class="fmg-chat-welcome-icon">💬</div>
-                                <div>选择角色后，可以在这里讨论角色卡的内容</div>
-                                <div style="font-size:11px;color:#888;margin-top:4px;">角色卡信息和世界书将自动作为上下文注入</div>
+                                <div>选择角色后，可以在这里讨论角色卡和世界书设定</div>
+                                <div style="font-size:11px;color:#888;margin-top:4px;">需要沉淀设定时，直接要求 AI 输出世界书条目即可一键添加</div>
                             </div>
                         </div>
                         <div class="fmg-chat-input-area">
-                            <textarea id="fmg-discuss-input" class="fmg-chat-input" placeholder="输入消息讨论角色卡内容..." rows="2"></textarea>
+                            <textarea id="fmg-discuss-input" class="fmg-chat-input" placeholder="输入消息讨论角色卡、修改字段，或要求 AI 输出世界书条目..." rows="2"></textarea>
                             <button class="fmg-btn fmg-btn-primary fmg-chat-send" id="fmg-discuss-send">发送</button>
                         </div>
                         <div id="fmg-discuss-status" class="fmg-status" style="display: none;"></div>
@@ -1395,6 +1397,7 @@
 
     async function loadWorldInfoList(context, forceRefresh = true) {
         window._fmgWorldEntries = [];
+        currentWorldInfoSelectionScope = 'global';
 
         try {
             let entries = [];
@@ -1405,6 +1408,7 @@
                 const worldName = char?.data?.extensions?.world;
 
                 if (worldName) {
+                    currentWorldInfoSelectionScope = `world:${worldName}`;
                     console.log('[开场白生成器] 发现外部关联世界书:', worldName);
 
                     try {
@@ -1445,6 +1449,7 @@
 
                 // 如果外部世界书为空，尝试从角色卡内嵌的character_book获取
                 if (entries.length === 0) {
+                    currentWorldInfoSelectionScope = `character:${char?.avatar || char?.name || context.characterId}`;
                     entries = getCharacterBookEntries(context);
                     console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
                 }
@@ -1454,8 +1459,16 @@
 
             window._fmgWorldEntries = entries;
 
+            if (!settings.worldInfoSelectionInitializedByScope?.[getCurrentWorldInfoSelectionScope()]
+                && !hasAnyScopedWorldInfoSelection()
+                && Array.isArray(settings.selectedWorldEntries)
+                && settings.selectedWorldEntries.length > 0) {
+                setSavedWorldInfoSelections(settings.selectedWorldEntries);
+                saveSettings();
+            }
+
             // 如果没有保存的选择，初始化为启用的条目
-            if (!settings.selectedWorldEntries || settings.selectedWorldEntries.length === 0) {
+            if (!hasInitializedWorldInfoSelection()) {
                 const defaultSelections = [];
                 entries.forEach((entry, idx) => {
                     if (entry.enabled !== false) {
@@ -1463,7 +1476,7 @@
                         defaultSelections.push(identifier);
                     }
                 });
-                settings.selectedWorldEntries = defaultSelections;
+                setSavedWorldInfoSelections(defaultSelections);
                 saveSettings();
             }
 
@@ -1548,6 +1561,53 @@
         return entries;
     }
 
+    function getCurrentWorldInfoSelectionScope() {
+        return currentWorldInfoSelectionScope || 'global';
+    }
+
+    function ensureWorldInfoSelectionStorage() {
+        if (!settings.worldInfoSelectionsByScope || typeof settings.worldInfoSelectionsByScope !== 'object') {
+            settings.worldInfoSelectionsByScope = {};
+        }
+        if (!settings.worldInfoSelectionInitializedByScope || typeof settings.worldInfoSelectionInitializedByScope !== 'object') {
+            settings.worldInfoSelectionInitializedByScope = {};
+        }
+    }
+
+    function hasAnyScopedWorldInfoSelection() {
+        ensureWorldInfoSelectionStorage();
+        return Object.values(settings.worldInfoSelectionInitializedByScope).some(value => value === true);
+    }
+
+    function getSavedWorldInfoSelections(scope = getCurrentWorldInfoSelectionScope()) {
+        ensureWorldInfoSelectionStorage();
+        if (settings.worldInfoSelectionInitializedByScope[scope] === true) {
+            return Array.isArray(settings.worldInfoSelectionsByScope[scope])
+                ? settings.worldInfoSelectionsByScope[scope]
+                : [];
+        }
+        if (hasAnyScopedWorldInfoSelection()) {
+            return [];
+        }
+        return Array.isArray(settings.selectedWorldEntries) ? settings.selectedWorldEntries : [];
+    }
+
+    function hasInitializedWorldInfoSelection(scope = getCurrentWorldInfoSelectionScope()) {
+        ensureWorldInfoSelectionStorage();
+        return settings.worldInfoSelectionInitializedByScope[scope] === true
+            || (!hasAnyScopedWorldInfoSelection()
+                && Array.isArray(settings.selectedWorldEntries)
+                && settings.selectedWorldEntries.length > 0);
+    }
+
+    function setSavedWorldInfoSelections(selectedIdentifiers, scope = getCurrentWorldInfoSelectionScope()) {
+        ensureWorldInfoSelectionStorage();
+        const normalizedSelections = Array.from(new Set((selectedIdentifiers || []).filter(Boolean)));
+        settings.worldInfoSelectionsByScope[scope] = normalizedSelections;
+        settings.worldInfoSelectionInitializedByScope[scope] = true;
+        settings.selectedWorldEntries = normalizedSelections;
+    }
+
     function getWorldInfoIdentifier(entry, idx = 0) {
         const numericUid = Number(entry?.uid);
         if (Number.isFinite(numericUid)) {
@@ -1588,7 +1648,7 @@
 
     function getSelectedWorldInfo() {
         const entries = window._fmgWorldEntries || [];
-        const savedSelections = settings.selectedWorldEntries || [];
+        const savedSelections = getSavedWorldInfoSelections();
         const selected = [];
 
         // 使用保存的选择
@@ -1626,7 +1686,7 @@
     function updateCounts() {
         // 更新世界书计数
         const wiEntries = window._fmgWorldEntries || [];
-        const wiSelected = (settings.selectedWorldEntries || []).length;
+        const wiSelected = getSelectedWorldInfo().length;
         const wiCountEl = document.getElementById('fmg-wi-count');
         if (wiCountEl) {
             wiCountEl.textContent = `${wiSelected}/${wiEntries.length}`;
@@ -1656,7 +1716,7 @@
         const title = isWorldInfo ? '📚 选择世界书条目' : '📋 选择预设条目';
         const entries = isWorldInfo ? (window._fmgWorldEntries || []) : (window._fmgPresetPrompts || []);
         const savedSelections = isWorldInfo
-            ? (settings.selectedWorldEntries || [])
+            ? getSavedWorldInfoSelections()
             : (settings.selectedPresetPrompts || []);
 
         if (entries.length === 0) {
@@ -1758,7 +1818,7 @@
             });
 
             if (isWorldInfo) {
-                settings.selectedWorldEntries = selectedIdentifiers;
+                setSavedWorldInfoSelections(selectedIdentifiers);
             } else {
                 settings.selectedPresetPrompts = selectedIdentifiers;
             }
@@ -2340,8 +2400,8 @@
         return `
             <div class="fmg-chat-welcome">
                 <div class="fmg-chat-welcome-icon">💬</div>
-                <div>选择角色后，可以在这里讨论角色卡的内容</div>
-                <div style="font-size:11px;color:#888;margin-top:4px;">角色卡信息和世界书将自动作为上下文注入</div>
+                <div>选择角色后，可以在这里讨论角色卡和世界书设定</div>
+                <div style="font-size:11px;color:#888;margin-top:4px;">需要沉淀设定时，直接要求 AI 输出世界书条目即可一键添加</div>
             </div>
         `;
     }
@@ -2355,7 +2415,9 @@
         const visibleMessages = discussMessages.filter(msg => msg.role !== 'system');
 
         window._fmgPendingEdits = {};
+        window._fmgPendingWorldbookEntries = {};
         _editIdCounter = 0;
+        _worldbookEntryIdCounter = 0;
         container.innerHTML = '';
 
         if (visibleMessages.length === 0) {
@@ -2528,7 +2590,7 @@
 
     function updateDiscussWiCount() {
         const wiEntries = window._fmgWorldEntries || [];
-        const wiSelected = (settings.selectedWorldEntries || []).length;
+        const wiSelected = getSelectedWorldInfo().length;
         const el = document.getElementById('fmg-discuss-wi-count');
         if (el) el.textContent = `${wiSelected}/${wiEntries.length}`;
     }
@@ -2562,6 +2624,8 @@
             const wiText = worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n');
             parts.push(`【世界书设定】\n${wiText}`);
         }
+
+        const editableEntriesText = formatSelectedWorldInfoForUpdate(worldInfo);
 
         // 编辑格式说明
         parts.push(`【修改角色卡格式说明】
@@ -2598,6 +2662,42 @@
 2. 普通讨论时不要使用此格式
 3. [EDIT:xxx] 块内应包含该字段修改后的完整内容，而不是差异或补丁
 4. 可以在 [EDIT] 块前后添加普通文字解释你的修改理由`);
+
+        parts.push(`【世界书条目输出格式说明】
+当用户明确要求“输出世界书条目”“给我可直接添加的版本”“生成可写入世界书的内容”“把刚才讨论的设定沉淀到世界书”时，你可以在解释后输出一个或多个世界书条目块。
+
+【当前已选条目清单（更新已有条目时优先使用这些 UID）】
+${editableEntriesText}
+
+条目块必须使用下面的精确格式，不要使用 markdown 代码块包裹：
+[WORLDBOOK_ENTRY]
+{
+  "operation": "create",
+  "comment": "条目标题或备注",
+  "keys": ["主关键词1", "主关键词2"],
+  "secondary_keys": ["次级关键词"],
+  "content": "条目完整正文",
+  "constant": false,
+  "selective": true,
+  "position": "at_depth",
+  "depth": 4,
+  "role": "system",
+  "placement_reason": "这条更像写作约束与持续生效的规则，放在 depth system 比普通前置世界书更稳定。",
+  "insertion_order": 100
+}
+[/WORLDBOOK_ENTRY]
+
+世界书规则：
+1. 新建条目时 operation 必须是 "create"，不要填写 uid。
+2. 更新已有条目时 operation 必须是 "update"，并填写当前已选条目清单中对应的 uid。
+3. 常驻条目 constant=true 时 keys 应为空数组；非常驻条目 keys 至少有一个主关键词。
+4. position 可用值：before_char, after_char, before_author_note, after_author_note, before_example_messages, after_example_messages, at_depth, outlet。
+5. position 为 at_depth 时必须提供 depth 和 role，role 只能是 system、user、assistant。
+6. position 为 outlet 时必须提供 outlet_name。
+7. content 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
+8. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析。
+9. 只有在用户明确要求产出世界书条目时才输出 [WORLDBOOK_ENTRY] 块；普通讨论和角色字段修改时不要输出世界书条目块。
+10. 如果用户同时要求修改角色卡和生成世界书，可以同时输出 [EDIT] 块和 [WORLDBOOK_ENTRY] 块，但每个块都必须格式完整。`);
 
         return parts.join('\n\n');
     }
@@ -2848,25 +2948,59 @@
     }
 
     function renderAssistantContent(content) {
-        const edits = parseEditBlocks(content);
-        if (edits.length === 0) {
+        const blocks = [
+            ...parseEditBlocks(content).map(edit => ({ type: 'edit', start: edit.start, end: edit.end, data: edit })),
+            ...parseWorldbookEntryBlocks(content).map(entry => ({ type: 'worldbook', start: entry.start, end: entry.end, data: entry }))
+        ].sort((a, b) => a.start - b.start || a.end - b.end);
+
+        if (blocks.length === 0) {
             return escapeHtml(content);
         }
 
         let html = '';
         let lastIndex = 0;
 
-        for (const edit of edits) {
-            if (edit.start > lastIndex) {
-                const plainText = content.substring(lastIndex, edit.start).trim();
+        for (const block of blocks) {
+            if (block.start < lastIndex) continue;
+
+            if (block.start > lastIndex) {
+                const plainText = content.substring(lastIndex, block.start).trim();
                 if (plainText) {
                     html += '<div class="fmg-chat-plain">' + escapeHtml(plainText) + '</div>';
                 }
             }
-            const editKey = 'edit_' + (++_editIdCounter);
-            window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
-            html += renderEditCard(edit, editKey);
-            lastIndex = edit.end;
+
+            if (block.type === 'edit') {
+                const edit = block.data;
+                const editKey = 'edit_' + (++_editIdCounter);
+                window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
+                html += renderEditCard(edit, editKey);
+            } else {
+                const entry = block.data;
+                const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
+                if (!entry.invalid) {
+                    window._fmgPendingWorldbookEntries[entryKey] = {
+                        operation: entry.operation,
+                        uid: entry.uid,
+                        comment: entry.comment,
+                        keys: entry.keys,
+                        secondary_keys: entry.secondary_keys,
+                        content: entry.content,
+                        constant: entry.constant,
+                        vectorized: false,
+                        selective: entry.selective,
+                        position: entry.position,
+                        depth: entry.depth,
+                        role: entry.role,
+                        outlet_name: entry.outlet_name,
+                        placement_reason: entry.placement_reason,
+                        insertion_order: entry.insertion_order,
+                        enabled: entry.enabled
+                    };
+                }
+                html += renderWorldbookEntryCard(entry, entryKey);
+            }
+            lastIndex = block.end;
         }
 
         if (lastIndex < content.length) {
@@ -3028,7 +3162,7 @@
 
     function updateWorldbookWiCount() {
         const wiEntries = window._fmgWorldEntries || [];
-        const wiSelected = (settings.selectedWorldEntries || []).length;
+        const wiSelected = getSelectedWorldInfo().length;
         const el = document.getElementById('fmg-wb-wi-count');
         if (el) el.textContent = `${wiSelected}/${wiEntries.length}`;
     }
@@ -4235,12 +4369,12 @@ ${editableEntriesText}
             context.reloadWorldInfoEditor(worldName, true);
         }
 
-        const savedSelections = settings.selectedWorldEntries || [];
+        const savedSelections = getSavedWorldInfoSelections();
         const persistedIdentifier = getWorldInfoIdentifier(targetEntry, worldEntries.indexOf(targetEntry));
         const legacyIdentifiers = getLegacyWorldInfoIdentifiers(targetEntry, worldEntries.indexOf(targetEntry));
         const mergedSelections = [...new Set([...savedSelections, persistedIdentifier, ...legacyIdentifiers])];
         if (mergedSelections.length !== savedSelections.length) {
-            settings.selectedWorldEntries = mergedSelections;
+            setSavedWorldInfoSelections(mergedSelections);
             saveSettings();
         }
 
@@ -4278,6 +4412,7 @@ ${editableEntriesText}
     }
 
     async function applyWorldbookEntry(entryData, buttonEl) {
+        const statusId = buttonEl?.closest('.fmg-discuss-container') ? 'fmg-discuss-status' : 'fmg-wb-status';
         try {
             const result = await persistWorldbookEntry(entryData);
 
@@ -4290,14 +4425,15 @@ ${editableEntriesText}
                 }
             }
 
-            showStatus('fmg-wb-status', 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
+            showStatus(statusId, 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
             if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${result.isUpdate ? '更新' : '添加'}`);
             await loadWorldInfoList(result.context, true);
+            requestDiscussTokenCountUpdate();
             requestWorldbookTokenCountUpdate();
 
         } catch (error) {
             console.error('[开场白生成器] 添加世界书条目失败:', error);
-            showStatus('fmg-wb-status', 'error', '添加失败: ' + error.message);
+            showStatus(statusId, 'error', '添加失败: ' + error.message);
             if (typeof toastr !== 'undefined') toastr.error('添加世界书条目失败: ' + error.message);
             if (buttonEl) {
                 buttonEl.textContent = '⚠️ 重试';
