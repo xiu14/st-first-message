@@ -1160,6 +1160,7 @@
     function openPopup() {
         document.getElementById('fmg-overlay').classList.add('show');
         document.getElementById('fmg-popup').classList.add('show');
+        updatePopupFocusState();
         updateStatusBarStyleControl();
         loadCharacterData();
         renderHistoryList();
@@ -1190,10 +1191,24 @@
         document.querySelectorAll('.fmg-tab-content').forEach(content => {
             content.classList.toggle('active', content.dataset.tab === tabName);
         });
+        updatePopupFocusState(tabName);
         if (tabName === 'statusbar') {
             updateStatusBarStyleControl();
         }
         renderChatSessionControls();
+    }
+
+    function updatePopupFocusState(activeTabName = null) {
+        const popup = document.getElementById('fmg-popup');
+        if (!popup) return;
+
+        const activeTab = activeTabName
+            || document.querySelector('.fmg-tab.active')?.dataset?.tab
+            || '';
+        const isFocusedChatTab = (activeTab === 'discuss' && discussFocusMode)
+            || (activeTab === 'worldbook' && worldbookFocusMode);
+
+        popup.classList.toggle('fmg-mobile-chat-focus-active', isFocusedChatTab);
     }
 
     function updateStatusBarStyleControl() {
@@ -2468,6 +2483,8 @@
             toggleBtn.title = discussFocusMode ? '显示讨论页的其他操作区' : '收起非聊天区域，只保留聊天区';
             toggleBtn.classList.toggle('active', discussFocusMode);
         }
+
+        updatePopupFocusState();
     }
 
     function requestDiscussTokenCountUpdate(delay = 0) {
@@ -3212,6 +3229,8 @@ ${editableEntriesText}
             toggleBtn.title = worldbookFocusMode ? '显示世界书页面的其他操作区' : '收起非聊天区域，只保留聊天区';
             toggleBtn.classList.toggle('active', worldbookFocusMode);
         }
+
+        updatePopupFocusState();
     }
 
     function requestWorldbookTokenCountUpdate(delay = 0) {
