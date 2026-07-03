@@ -1759,6 +1759,50 @@
     background: rgba(255, 255, 255, 0.02);
 }
 
+.fmg-first-message-plan-card {
+    background: rgba(100, 180, 255, 0.06);
+    border: 1px solid rgba(100, 180, 255, 0.25);
+    border-radius: 10px;
+    margin: 8px 0;
+    overflow: hidden;
+    transition: border-color 0.3s, opacity 0.3s;
+}
+
+.fmg-first-message-plan-card.invalid {
+    border-color: rgba(255, 180, 100, 0.28);
+    background: rgba(255, 180, 100, 0.06);
+}
+
+.fmg-first-message-plan-card.ignored {
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.fmg-first-message-plan-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(100, 180, 255, 0.12);
+    font-size: 13px;
+    font-weight: 600;
+    color: #8dc3ff;
+    border-bottom: 1px solid rgba(100, 180, 255, 0.15);
+}
+
+.fmg-first-message-outline {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.fmg-first-message-outline li {
+    margin: 3px 0;
+}
+
+.fmg-first-message-empty {
+    color: #888;
+}
+
 .fmg-edit-ignored-badge {
     display: inline-flex;
     align-items: center;

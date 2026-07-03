@@ -976,6 +976,33 @@
             }
         });
 
+        // 开场白规划卡片 - 确认并调用生成页
+        document.addEventListener('click', (e) => {
+            const applyBtn = e.target.closest('.fmg-first-message-plan-apply');
+            if (applyBtn) {
+                const key = applyBtn.dataset.planKey;
+                const planData = window._fmgPendingFirstMessagePlans?.[key];
+                if (planData) {
+                    applyBtn.disabled = true;
+                    applyBtn.textContent = '⏳ 跳转中...';
+                    applyFirstMessagePlan(planData, applyBtn);
+                }
+            }
+        });
+
+        // 开场白规划卡片 - 忽略
+        document.addEventListener('click', (e) => {
+            const ignoreBtn = e.target.closest('.fmg-first-message-plan-ignore');
+            if (ignoreBtn) {
+                const card = ignoreBtn.closest('.fmg-first-message-plan-card');
+                if (card) {
+                    card.classList.add('ignored');
+                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
+                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
+                }
+            }
+        });
+
         // 世界书卡片 - 应用
         document.addEventListener('click', (e) => {
             const applyBtn = e.target.closest('.fmg-worldbook-apply');
@@ -2431,8 +2458,10 @@
 
         window._fmgPendingEdits = {};
         window._fmgPendingWorldbookEntries = {};
+        window._fmgPendingFirstMessagePlans = {};
         _editIdCounter = 0;
         _worldbookEntryIdCounter = 0;
+        _firstMessagePlanIdCounter = 0;
         container.innerHTML = '';
 
         if (visibleMessages.length === 0) {
@@ -2680,6 +2709,26 @@
 3. [EDIT:xxx] 块内应包含该字段修改后的完整内容，而不是差异或补丁
 4. 可以在 [EDIT] 块前后添加普通文字解释你的修改理由`);
 
+        parts.push(`【开场白生成规划格式说明】
+当用户明确要求“生成开场白”“给我写开场白”“最后帮我出一个开场白”“按刚才修改后的设定生成开场白”等需求时，不要直接输出最终开场白。你应该先给出一个简短大纲，让用户确认后再由工具调用生成页完成正式生成。
+
+请使用以下精确格式输出规划块，不要使用 markdown 代码块包裹：
+[FIRST_MESSAGE_PLAN]
+{
+  "title": "开场白生成大纲标题",
+  "style": "整体风格，例如悬疑、温柔日常、压迫感、第一人称等",
+  "outline": ["开场画面", "角色登场方式", "互动钩子", "氛围或冲突"],
+  "request": "可直接填入开场白生成页的完整需求，包含视角、语气、长度、需要强调的设定和避免事项",
+  "notes": "可选补充，提醒用户确认的重点"
+}
+[/FIRST_MESSAGE_PLAN]
+
+开场白规划规则：
+1. 只有用户明确要生成开场白时才输出 [FIRST_MESSAGE_PLAN] 块。
+2. request 必须是完整、可直接用于生成页的中文需求，不要只写几个关键词。
+3. outline 应该简洁，帮助用户确认方向，不要写最终成品。
+4. 如果用户同时要求修改角色卡字段，可以同时输出 [EDIT] 块和 [FIRST_MESSAGE_PLAN] 块，但必须让用户先确认应用修改后再确认生成。`);
+
         parts.push(`【世界书条目输出格式说明】
 当用户明确要求“输出世界书条目”“给我可直接添加的版本”“生成可写入世界书的内容”“把刚才讨论的设定沉淀到世界书”时，你可以在解释后输出一个或多个世界书条目块。
 
@@ -2840,7 +2889,9 @@ ${editableEntriesText}
     // ========================================
 
     window._fmgPendingEdits = {};
+    window._fmgPendingFirstMessagePlans = {};
     let _editIdCounter = 0;
+    let _firstMessagePlanIdCounter = 0;
 
     function parseEditBlocks(text) {
         const regex = /\[EDIT:([^\]\s]+)\]([\s\S]*?)\[\/EDIT\]/g;
@@ -2947,6 +2998,128 @@ ${editableEntriesText}
         return rawValue;
     }
 
+    function parseFirstMessagePlanBlocks(text) {
+        const regex = /\[FIRST_MESSAGE_PLAN\]([\s\S]*?)\[\/FIRST_MESSAGE_PLAN\]/g;
+        const plans = [];
+        let match;
+
+        while ((match = regex.exec(text)) !== null) {
+            const rawBlock = match[1].trim();
+            try {
+                const parsed = JSON.parse(rawBlock);
+                const outline = Array.isArray(parsed.outline)
+                    ? parsed.outline.map(item => String(item || '').trim()).filter(Boolean)
+                    : normalizeStringArray(parsed.outline);
+                const request = String(parsed.request || parsed.prompt || parsed.requirement || '').trim();
+
+                if (!request && outline.length === 0) {
+                    throw new Error('缺少 request 或 outline');
+                }
+
+                plans.push({
+                    title: String(parsed.title || '开场白生成大纲').trim(),
+                    style: String(parsed.style || '').trim(),
+                    outline,
+                    request,
+                    notes: String(parsed.notes || parsed.note || '').trim(),
+                    start: match.index,
+                    end: regex.lastIndex
+                });
+            } catch (error) {
+                plans.push({
+                    invalid: true,
+                    raw: rawBlock,
+                    error: error.message,
+                    start: match.index,
+                    end: regex.lastIndex
+                });
+            }
+        }
+
+        return plans;
+    }
+
+    function buildFirstMessageRequestFromPlan(plan) {
+        const parts = [];
+        if (plan.request) parts.push(plan.request);
+        if (plan.style) parts.push(`风格方向：${plan.style}`);
+        if (Array.isArray(plan.outline) && plan.outline.length > 0) {
+            parts.push(`开场白大纲：\n${plan.outline.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
+        }
+        if (plan.notes) parts.push(`补充注意：${plan.notes}`);
+        return parts.join('\n\n').trim();
+    }
+
+    function renderFirstMessagePlanCard(plan, planKey) {
+        if (plan.invalid) {
+            return `
+                <div class="fmg-first-message-plan-card invalid">
+                    <div class="fmg-first-message-plan-header">⚠️ 开场白大纲解析失败</div>
+                    <div class="fmg-worldbook-meta">
+                        <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">原因</span><span>${escapeHtml(plan.error || '未知错误')}</span></div>
+                    </div>
+                    <div class="fmg-edit-card-new">
+                        <div class="fmg-edit-card-label-static">原始内容</div>
+                        <div class="fmg-edit-card-new-content">${escapeHtml(plan.raw || '')}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const outlineHtml = Array.isArray(plan.outline) && plan.outline.length > 0
+            ? `<ol class="fmg-first-message-outline">${plan.outline.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`
+            : '<div class="fmg-first-message-empty">（未提供大纲条目）</div>';
+        const requestText = buildFirstMessageRequestFromPlan(plan);
+
+        return `
+            <div class="fmg-first-message-plan-card" data-plan-key="${planKey}">
+                <div class="fmg-first-message-plan-header">📝 ${escapeHtml(plan.title || '开场白生成大纲')}</div>
+                <div class="fmg-worldbook-meta">
+                    ${plan.style ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">风格</span><span>${escapeHtml(plan.style)}</span></div>` : ''}
+                    ${plan.notes ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">备注</span><span>${escapeHtml(plan.notes)}</span></div>` : ''}
+                </div>
+                <div class="fmg-edit-card-new">
+                    <div class="fmg-edit-card-label-static">📋 待确认大纲</div>
+                    <div class="fmg-edit-card-new-content">${outlineHtml}</div>
+                </div>
+                <div class="fmg-edit-card-new">
+                    <div class="fmg-edit-card-label-static">✍️ 将发送到生成页的需求</div>
+                    <div class="fmg-edit-card-new-content">${escapeHtml(requestText)}</div>
+                </div>
+                <div class="fmg-edit-card-actions">
+                    <button class="fmg-btn fmg-btn-primary fmg-first-message-plan-apply" data-plan-key="${planKey}">✅ 确认并生成开场白</button>
+                    <button class="fmg-btn fmg-btn-secondary fmg-first-message-plan-ignore" data-plan-key="${planKey}">❌ 忽略</button>
+                </div>
+            </div>
+        `;
+    }
+
+    async function applyFirstMessagePlan(plan, buttonEl) {
+        const requestText = buildFirstMessageRequestFromPlan(plan);
+        if (!requestText) {
+            if (buttonEl) {
+                buttonEl.disabled = false;
+                buttonEl.textContent = '✅ 确认并生成开场白';
+            }
+            showStatus('fmg-discuss-status', 'error', '开场白大纲缺少可发送到生成页的需求');
+            return;
+        }
+
+        const promptInput = document.getElementById('fmg-prompt');
+        if (!promptInput) {
+            showStatus('fmg-discuss-status', 'error', '未找到生成页需求输入框');
+            return;
+        }
+
+        promptInput.value = requestText;
+        switchTab('generate');
+        showStatus('fmg-status', 'loading', '已根据讨论大纲填写需求，正在生成开场白...');
+
+        setTimeout(() => {
+            generateFirstMessage();
+        }, 80);
+    }
+
     function formatEditFieldValue(value) {
         if (value === undefined || value === null || value === '') return '（空）';
         if (typeof value === 'object') {
@@ -2967,6 +3140,7 @@ ${editableEntriesText}
     function renderAssistantContent(content) {
         const blocks = [
             ...parseEditBlocks(content).map(edit => ({ type: 'edit', start: edit.start, end: edit.end, data: edit })),
+            ...parseFirstMessagePlanBlocks(content).map(plan => ({ type: 'first-message-plan', start: plan.start, end: plan.end, data: plan })),
             ...parseWorldbookEntryBlocks(content).map(entry => ({ type: 'worldbook', start: entry.start, end: entry.end, data: entry }))
         ].sort((a, b) => a.start - b.start || a.end - b.end);
 
@@ -2992,6 +3166,19 @@ ${editableEntriesText}
                 const editKey = 'edit_' + (++_editIdCounter);
                 window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
                 html += renderEditCard(edit, editKey);
+            } else if (block.type === 'first-message-plan') {
+                const plan = block.data;
+                const planKey = 'first_message_plan_' + (++_firstMessagePlanIdCounter);
+                if (!plan.invalid) {
+                    window._fmgPendingFirstMessagePlans[planKey] = {
+                        title: plan.title,
+                        style: plan.style,
+                        outline: plan.outline,
+                        request: plan.request,
+                        notes: plan.notes
+                    };
+                }
+                html += renderFirstMessagePlanCard(plan, planKey);
             } else {
                 const entry = block.data;
                 const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
