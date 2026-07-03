@@ -1584,15 +1584,28 @@
         flex: 1;
         min-width: 0;
         flex-wrap: nowrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
         gap: 4px;
         overflow-x: auto;
+        overflow-y: hidden;
         scrollbar-width: none;
+        touch-action: pan-x;
+        overscroll-behavior-inline: contain;
         -webkit-overflow-scrolling: touch;
     }
 
     #fmg-popup.fmg-mobile-chat-focus-active .fmg-chat-header .fmg-btn-group::-webkit-scrollbar {
         display: none;
+    }
+
+    #fmg-popup.fmg-mobile-chat-focus-active #fmg-discuss-focus-toggle,
+    #fmg-popup.fmg-mobile-chat-focus-active #fmg-wb-focus-toggle {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        display: inline-flex !important;
+        background: rgba(100, 200, 255, 0.18);
+        border-color: rgba(100, 200, 255, 0.28);
     }
 
     #fmg-popup.fmg-mobile-chat-focus-active .fmg-btn-small,
