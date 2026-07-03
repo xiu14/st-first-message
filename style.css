@@ -732,6 +732,14 @@
     background: rgba(100, 200, 255, 0.25) !important;
 }
 
+/* 讨论页不再显示“勾选 AI 回复直接转世界书”的入口，保留底层逻辑以降低改动风险。 */
+#fmg-discuss-worldbook-toggle,
+#fmg-discuss-worldbook-apply,
+#fmg-discuss-worldbook-cancel,
+#fmg-discuss-worldbook-toolbar {
+    display: none !important;
+}
+
 /* 选择弹窗 */
 #fmg-selection-modal,
 #fmg-discuss-history-modal,
