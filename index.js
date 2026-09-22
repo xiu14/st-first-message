@@ -16,6 +16,9 @@
         apiKey: '',
         model: 'gpt-4o-mini',
         models: [],
+        // API 配置方案（可保存多套并切换）
+        apiProfiles: [],
+        activeApiProfileId: '',
         // 数据选择状态
         includeDescription: true,
         includePersonality: true,
@@ -138,6 +141,7 @@
             if (context && context.extensionSettings && context.extensionSettings[EXTENSION_NAME]) {
                 settings = { ...DEFAULT_SETTINGS, ...context.extensionSettings[EXTENSION_NAME] };
                 console.log('[开场白生成器] 从 extensionSettings 加载设置');
+                migrateApiProfiles();
                 return;
             }
 
@@ -145,11 +149,73 @@
             if (saved) {
                 settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
                 console.log('[开场白生成器] 从 localStorage 加载设置');
+                migrateApiProfiles();
                 saveSettings();
             }
         } catch (e) {
             console.error('[开场白生成器] 加载设置失败:', e);
         }
+    }
+
+    // ========================================
+    // API 配置方案管理
+    // ========================================
+
+    function generateProfileId() {
+        return 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function getApiProfiles() {
+        if (!Array.isArray(settings.apiProfiles)) settings.apiProfiles = [];
+        return settings.apiProfiles;
+    }
+
+    function getActiveApiProfile() {
+        return getApiProfiles().find(p => p.id === settings.activeApiProfileId) || null;
+    }
+
+    function buildProfileName(apiType, apiUrl, model) {
+        let host = '';
+        try {
+            host = new URL(apiUrl).hostname;
+        } catch (e) {
+            host = (apiUrl || '').replace(/^https?:\/\//, '').split('/')[0];
+        }
+        const parts = [host || (apiType === 'gemini' ? 'Gemini' : 'OpenAI'), model].filter(Boolean);
+        return parts.join(' / ');
+    }
+
+    // 旧版本只有一套扁平配置，首次加载时把它迁移为一个方案
+    function migrateApiProfiles() {
+        const profiles = getApiProfiles();
+        if (profiles.length === 0 && (settings.apiUrl || settings.apiKey)) {
+            const profile = {
+                id: generateProfileId(),
+                name: buildProfileName(settings.apiType, settings.apiUrl, settings.model) || '默认配置',
+                apiType: settings.apiType || 'openai',
+                apiUrl: settings.apiUrl || '',
+                apiKey: settings.apiKey || '',
+                model: settings.model || '',
+                models: Array.isArray(settings.models) ? [...settings.models] : []
+            };
+            profiles.push(profile);
+            settings.activeApiProfileId = profile.id;
+            console.log('[开场白生成器] 已将旧版 API 配置迁移为方案:', profile.name);
+        }
+        if (profiles.length > 0 && !getActiveApiProfile()) {
+            settings.activeApiProfileId = profiles[0].id;
+        }
+    }
+
+    // 把方案内容灌回扁平字段，其余调用 API 的代码无需改动
+    function applyApiProfile(profile) {
+        if (!profile) return;
+        settings.activeApiProfileId = profile.id;
+        settings.apiType = profile.apiType || 'openai';
+        settings.apiUrl = profile.apiUrl || '';
+        settings.apiKey = profile.apiKey || '';
+        settings.model = profile.model || '';
+        settings.models = Array.isArray(profile.models) ? [...profile.models] : [];
     }
 
     async function saveSettings() {
@@ -555,6 +621,22 @@
                 <!-- API设置页 -->
                 <div class="fmg-tab-content" data-tab="api">
                     <div class="fmg-form-group">
+                        <label>配置方案</label>
+                        <div class="fmg-form-row">
+                            <select id="fmg-api-profile">
+                                <option value="">（新建配置）</option>
+                            </select>
+                            <button class="fmg-btn fmg-btn-secondary" id="fmg-api-profile-new" title="清空表单，填写新配置">➕ 新建</button>
+                            <button class="fmg-btn fmg-btn-danger" id="fmg-api-profile-delete" title="删除当前方案">🗑 删除</button>
+                        </div>
+                    </div>
+
+                    <div class="fmg-form-group">
+                        <label>方案名称（留空则自动命名）</label>
+                        <input type="text" id="fmg-api-profile-name" placeholder="例如：中转站 / 官方 Gemini">
+                    </div>
+
+                    <div class="fmg-form-group">
                         <label>API类型</label>
                         <select id="fmg-api-type">
                             <option value="openai">OpenAI 格式</option>
@@ -597,25 +679,101 @@
     }
 
     function loadSettingsToForm() {
-        document.getElementById('fmg-api-type').value = settings.apiType;
-        document.getElementById('fmg-api-url').value = settings.apiUrl;
-        document.getElementById('fmg-api-key').value = settings.apiKey;
+        renderApiProfileSelect();
+        fillApiForm({
+            name: getActiveApiProfile()?.name || '',
+            apiType: settings.apiType,
+            apiUrl: settings.apiUrl,
+            apiKey: settings.apiKey,
+            model: settings.model,
+            models: settings.models
+        });
+
+        syncCharacterIncludeControls();
+    }
+
+    function renderApiProfileSelect() {
+        const select = document.getElementById('fmg-api-profile');
+        if (!select) return;
+        const profiles = getApiProfiles();
+        select.innerHTML = '<option value="">（新建配置）</option>' + profiles.map(p =>
+            `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || '未命名')}</option>`
+        ).join('');
+        select.value = getActiveApiProfile() ? settings.activeApiProfileId : '';
+
+        const deleteBtn = document.getElementById('fmg-api-profile-delete');
+        if (deleteBtn) deleteBtn.style.display = getActiveApiProfile() ? '' : 'none';
+    }
+
+    function fillApiForm(data) {
+        document.getElementById('fmg-api-profile-name').value = data.name || '';
+        document.getElementById('fmg-api-type').value = data.apiType || 'openai';
+        document.getElementById('fmg-api-url').value = data.apiUrl || '';
+        document.getElementById('fmg-api-key').value = data.apiKey || '';
 
         const modelSelect = document.getElementById('fmg-model');
         modelSelect.innerHTML = '';
-        if (settings.models && settings.models.length > 0) {
-            settings.models.forEach(m => {
+        if (data.models && data.models.length > 0) {
+            data.models.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m;
                 opt.textContent = m;
                 modelSelect.appendChild(opt);
             });
-            modelSelect.value = settings.model;
+            modelSelect.value = data.model || '';
         } else {
             modelSelect.innerHTML = '<option value="">请先获取模型列表</option>';
         }
+    }
 
-        syncCharacterIncludeControls();
+    // 切换方案：立即应用为当前生效配置
+    function switchApiProfile(profileId) {
+        if (!profileId) {
+            // 选择“新建配置”：清空表单，但不改变当前生效的配置
+            fillApiForm({ apiType: 'openai', apiUrl: '', apiKey: '', model: '', models: [] });
+            const deleteBtn = document.getElementById('fmg-api-profile-delete');
+            if (deleteBtn) deleteBtn.style.display = 'none';
+            showStatus('fmg-api-status', 'success', '请填写新配置后点击保存');
+            return;
+        }
+        const profile = getApiProfiles().find(p => p.id === profileId);
+        if (!profile) return;
+        applyApiProfile(profile);
+        saveSettings();
+        renderApiProfileSelect();
+        fillApiForm(profile);
+        showStatus('fmg-api-status', 'success', `已切换到「${profile.name}」`);
+    }
+
+    function newApiProfile() {
+        const select = document.getElementById('fmg-api-profile');
+        if (select) select.value = '';
+        switchApiProfile('');
+    }
+
+    function deleteApiProfile() {
+        const profile = getActiveApiProfile();
+        if (!profile) return;
+        if (!confirm(`确定删除方案「${profile.name}」？`)) return;
+
+        const profiles = getApiProfiles();
+        const idx = profiles.findIndex(p => p.id === profile.id);
+        if (idx >= 0) profiles.splice(idx, 1);
+
+        const next = profiles[idx] || profiles[idx - 1] || null;
+        if (next) {
+            applyApiProfile(next);
+        } else {
+            settings.activeApiProfileId = '';
+            settings.apiType = 'openai';
+            settings.apiUrl = '';
+            settings.apiKey = '';
+            settings.model = '';
+            settings.models = [];
+        }
+        saveSettings();
+        loadSettingsToForm();
+        showStatus('fmg-api-status', 'success', `已删除「${profile.name}」` + (next ? `，当前使用「${next.name}」` : ''));
     }
 
     function syncCharacterIncludeControls() {
@@ -683,6 +841,13 @@
             if (e.target.id === 'fmg-test') testConnection();
             if (e.target.id === 'fmg-get-models') getModels();
             if (e.target.id === 'fmg-save-api') saveApiSettings();
+            if (e.target.id === 'fmg-api-profile-new') newApiProfile();
+            if (e.target.id === 'fmg-api-profile-delete') deleteApiProfile();
+        });
+
+        // API 配置方案切换
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'fmg-api-profile') switchApiProfile(e.target.value);
         });
 
         // 世界书选择弹窗
@@ -5824,22 +5989,45 @@ ${userRequest}
             }
 
             modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
-            settings.models = models;
+            // 模型列表只暂存在下拉框中，点击保存时才写入方案
 
-            showStatus('fmg-api-status', 'success', `找到 ${models.length} 个模型`);
+            showStatus('fmg-api-status', 'success', `找到 ${models.length} 个模型，选择后请点击保存`);
         } catch (e) {
             showStatus('fmg-api-status', 'error', '获取失败: ' + e.message);
         }
     }
 
     function saveApiSettings() {
-        settings.apiType = document.getElementById('fmg-api-type').value;
-        settings.apiUrl = document.getElementById('fmg-api-url').value.trim();
-        settings.apiKey = document.getElementById('fmg-api-key').value.trim();
-        settings.model = document.getElementById('fmg-model').value;
+        const apiType = document.getElementById('fmg-api-type').value;
+        const apiUrl = document.getElementById('fmg-api-url').value.trim();
+        const apiKey = document.getElementById('fmg-api-key').value.trim();
+        const model = document.getElementById('fmg-model').value;
+        const modelSelect = document.getElementById('fmg-model');
+        const models = Array.from(modelSelect.options).map(o => o.value).filter(Boolean);
+        let name = document.getElementById('fmg-api-profile-name').value.trim();
 
+        if (!apiUrl || !apiKey) {
+            showStatus('fmg-api-status', 'error', '请填写API URL和Key');
+            return;
+        }
+        if (!name) name = buildProfileName(apiType, apiUrl, model) || '未命名配置';
+
+        const profiles = getApiProfiles();
+        const selectedId = document.getElementById('fmg-api-profile').value;
+        let profile = selectedId ? profiles.find(p => p.id === selectedId) : null;
+        const isNew = !profile;
+
+        if (!profile) {
+            profile = { id: generateProfileId() };
+            profiles.push(profile);
+        }
+        Object.assign(profile, { name, apiType, apiUrl, apiKey, model, models });
+
+        applyApiProfile(profile);
         saveSettings();
-        showStatus('fmg-api-status', 'success', '设置已保存！');
+        renderApiProfileSelect();
+        document.getElementById('fmg-api-profile-name').value = name;
+        showStatus('fmg-api-status', 'success', isNew ? `已新建并启用「${name}」` : `「${name}」已保存并启用`);
     }
 
     // ========================================
