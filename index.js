@@ -1526,7 +1526,7 @@
                 if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
             } else {
                 badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
-                if (entry.role) badges.push(`<span class="fmg-badge" style="background:rgba(100,200,255,0.2);color:#64c8ff;">${entry.role}</span>`);
+                if (entry.role) badges.push(`<span class="fmg-badge" style="background:rgba(100,200,255,0.2);color:#64c8ff;">${escapeHtml(entry.role)}</span>`);
             }
 
             return `
@@ -4765,7 +4765,7 @@ ${userRequest}
                 return;
             }
 
-            modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+            modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
             // 模型列表只暂存在下拉框中，点击保存时才写入方案
 
             showStatus('fmg-api-status', 'success', `找到 ${models.length} 个模型，选择后请点击保存`);
@@ -5171,10 +5171,11 @@ ${userRequest}
         }
     }
 
+    const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+    // 同时转义引号，结果也能安全放进 HTML 属性值
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
     }
 
     // ========================================
