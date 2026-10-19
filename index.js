@@ -1280,13 +1280,15 @@
             const entryData = window._fmgPendingWorldbookEntries?.[key];
             if (!entryData) return;
 
-            const nextOrder = Number.isFinite(Number(orderInput.value)) ? Number(orderInput.value) : 100;
-            entryData.insertion_order = nextOrder;
+            const isBlank = orderInput.value.trim() === '';
+            const nextOrder = !isBlank && Number.isFinite(Number(orderInput.value)) ? Number(orderInput.value) : 100;
+            const keepOriginal = isBlank && entryData.keep_placement;
+            entryData.insertion_order = keepOriginal ? null : nextOrder;
 
             const card = orderInput.closest('.fmg-worldbook-card');
             const valueEl = card?.querySelector('.fmg-worldbook-order-value');
             if (valueEl) {
-                valueEl.textContent = String(nextOrder);
+                valueEl.textContent = keepOriginal ? '保持原设置' : String(nextOrder);
             }
         });
 
@@ -1773,7 +1775,11 @@
                     content: entry.content || '',
                     constant: entry.constant || false,
                     enabled: entry.enabled !== false && entry.disable !== true,
-                    position: entry.position ?? null
+                    position: entry.position ?? null,
+                    depth: Number.isFinite(Number(entry.depth)) ? Number(entry.depth) : null,
+                    role: entry.role !== null && Number.isFinite(Number(entry.role)) ? Number(entry.role) : null,
+                    order: Number.isFinite(Number(entry.order ?? entry.insertion_order)) ? Number(entry.order ?? entry.insertion_order) : null,
+                    outletName: String(entry.outletName || entry.outlet_name || '')
                 });
             }
         }
@@ -1898,9 +1904,25 @@
                 `UID: ${uidText}`,
                 `主关键词: ${keysText}`,
                 `次关键词: ${secondaryText}`,
+                `触发方式: ${entry.constant ? '常驻（蓝灯）' : '关键词触发（绿灯）'}`,
+                `插入位置: ${formatWorldInfoPlacement(entry)}`,
+                `插入顺序: ${entry.order ?? '未知'}`,
                 `内容: ${contentPreview}`
             ].join('\n');
         }).join('\n\n');
+    }
+
+    function formatWorldInfoPlacement(entry) {
+        const position = normalizeWorldbookPosition(entry.position);
+        if (position === null) return '未知';
+
+        const details = [`position=${getWorldbookPositionKey(position)}`];
+        if (position === WORLDBOOK_POSITIONS.atDepth) {
+            details.push(`depth=${entry.depth ?? 4}`, `role=${getWorldbookRoleLabel(entry.role)}`);
+        } else if (position === WORLDBOOK_POSITIONS.outlet && entry.outletName) {
+            details.push(`outlet_name=${entry.outletName}`);
+        }
+        return `${getWorldbookPositionLabel(position, entry.role, entry.outletName)}（${details.join(', ')}）`;
     }
 
     function updateCounts() {
@@ -2954,15 +2976,16 @@ ${editableEntriesText}
 
 世界书规则：
 1. 新建条目时 operation 必须是 "create"，不要填写 uid。
-2. 更新已有条目时 operation 必须是 "update"，并填写当前已选条目清单中对应的 uid。
-3. 常驻条目 constant=true 时 keys 应为空数组；非常驻条目 keys 至少有一个主关键词。
-4. position 可用值：before_char, after_char, before_author_note, after_author_note, before_example_messages, after_example_messages, at_depth, outlet。
-5. position 为 at_depth 时必须提供 depth 和 role，role 只能是 system、user、assistant。
-6. position 为 outlet 时必须提供 outlet_name。
-7. content 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-8. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析。
-9. 只有在用户明确要求产出世界书条目时才输出 [WORLDBOOK_ENTRY] 块；普通讨论和角色字段修改时不要输出世界书条目块。
-10. 如果用户同时要求修改角色卡和生成世界书，可以同时输出 [EDIT] 块和 [WORLDBOOK_ENTRY] 块，但每个块都必须格式完整。`);
+2. 更新已有条目时 operation 必须是 "update"，并填写当前已选条目清单中对应的 uid。更新时插入位置、深度、role 和顺序会自动沿用清单中原条目的设置（用户自己设置的，不要改动），可以省略 position、depth、role、insertion_order 和 placement_reason。
+3. 新建条目时由你根据内容决定 position、depth、role 和 insertion_order，并参考清单中已有条目的位置和顺序安排先后，同时给出 placement_reason。
+4. 常驻条目 constant=true 时 keys 应为空数组；非常驻条目 keys 至少有一个主关键词。
+5. position 可用值：before_char, after_char, before_author_note, after_author_note, before_example_messages, after_example_messages, at_depth, outlet。
+6. position 为 at_depth 时必须提供 depth 和 role，role 只能是 system、user、assistant。
+7. position 为 outlet 时必须提供 outlet_name。
+8. content 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
+9. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析。
+10. 只有在用户明确要求产出世界书条目时才输出 [WORLDBOOK_ENTRY] 块；普通讨论和角色字段修改时不要输出世界书条目块。
+11. 如果用户同时要求修改角色卡和生成世界书，可以同时输出 [EDIT] 块和 [WORLDBOOK_ENTRY] 块，但每个块都必须格式完整。`);
 
         return parts.join('\n\n');
     }
@@ -3402,7 +3425,8 @@ ${editableEntriesText}
                         outlet_name: entry.outlet_name,
                         placement_reason: entry.placement_reason,
                         insertion_order: entry.insertion_order,
-                        enabled: entry.enabled
+                        enabled: entry.enabled,
+                        keep_placement: entry.keep_placement === true
                     };
                 }
                 html += renderWorldbookEntryCard(entry, entryKey);
@@ -3857,8 +3881,8 @@ ${editableEntriesText}
    - "depth" 必须是数字，默认可用 4
    - "role" 只能是 "system"、"user"、"assistant"
 10. 当 position 为 "outlet" 时，必须提供 "outlet_name"。
-11. 请同时给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
-12. 如果用户要求你“帮我判断这个条目应该放在哪里”，你要主动分析它更适合普通世界书、作者注附近、depth 注入还是 outlet，并在输出条目块时填好对应字段。
+11. 新建条目时由你决定 position、depth、role 和 "insertion_order"，参考清单中已有条目的位置和顺序安排先后，并给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
+12. 更新已有条目时，插入位置、深度、role 和顺序会自动沿用清单中原条目的设置（这是用户自己设置的，不要改动），可以省略 position、depth、role、insertion_order 和 placement_reason。只有用户明确要求调整某个已有条目的位置时，才在正文里说明建议，由用户在卡片上手动调整。
 13. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
 14. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
    - 字符串值必须使用英文双引号包裹
@@ -4074,6 +4098,19 @@ ${editableEntriesText}
                 return WORLDBOOK_DEPTH_ROLES.assistant;
             default:
                 return null;
+        }
+    }
+
+    function getWorldbookPositionKey(position) {
+        switch (Number(position)) {
+            case WORLDBOOK_POSITIONS.after: return 'after_char';
+            case WORLDBOOK_POSITIONS.authorNoteBefore: return 'before_author_note';
+            case WORLDBOOK_POSITIONS.authorNoteAfter: return 'after_author_note';
+            case WORLDBOOK_POSITIONS.atDepth: return 'at_depth';
+            case WORLDBOOK_POSITIONS.exampleBefore: return 'before_example_messages';
+            case WORLDBOOK_POSITIONS.exampleAfter: return 'after_example_messages';
+            case WORLDBOOK_POSITIONS.outlet: return 'outlet';
+            default: return 'before_char';
         }
     }
 
@@ -4369,6 +4406,9 @@ ${editableEntriesText}
                     start: match.index,
                     end: regex.lastIndex
                 });
+                if (operation === 'update') {
+                    keepExistingWorldbookPlacement(entries[entries.length - 1]);
+                }
             } catch (error) {
                 entries.push({
                     invalid: true,
@@ -4381,6 +4421,20 @@ ${editableEntriesText}
         }
 
         return entries;
+    }
+
+    // 更新已有条目时沿用用户原本的位置、深度、role 和顺序，不采用 AI 给出的值。
+    // 找不到已加载的原条目时置空，保存时会回落到世界书里该条目的现有设置。
+    function keepExistingWorldbookPlacement(entry) {
+        const existing = (window._fmgWorldEntries || []).find(item => Number(item.uid) === Number(entry.uid)) || null;
+
+        entry.keep_placement = true;
+        entry.position = existing ? normalizeWorldbookPosition(existing.position) : null;
+        entry.depth = existing?.depth ?? null;
+        entry.role = existing?.role ?? null;
+        entry.outlet_name = existing?.outletName || '';
+        entry.insertion_order = existing?.order ?? null;
+        entry.placement_reason = '';
     }
 
     function renderWorldbookEntryCard(entry, entryKey) {
@@ -4402,7 +4456,9 @@ ${editableEntriesText}
         const triggerMode = entry.constant ? '常驻条目' : '关键词触发';
         const keysText = entry.keys.length > 0 ? entry.keys.join(', ') : '（无）';
         const secondaryText = entry.secondary_keys.length > 0 ? entry.secondary_keys.join(', ') : '（无）';
-        const modeLabel = entry.uid !== null ? `更新现有条目 #${entry.uid}` : '新增条目';
+        const modeLabel = entry.uid !== null ? `更新现有条目 #${entry.uid}（沿用原位置/深度/顺序）` : '新增条目';
+        const hasPosition = entry.position !== null && entry.position !== undefined;
+        const hasOrder = Number.isFinite(Number(entry.insertion_order)) && entry.insertion_order !== null;
         const actionLabel = entry.uid !== null ? '✅ 更新世界书条目' : '✅ 添加到世界书';
         const positionDetail = Number(entry.position) === WORLDBOOK_POSITIONS.atDepth
             ? `depth=${entry.depth ?? 4}, role=${getWorldbookRoleLabel(entry.role)}`
@@ -4411,7 +4467,11 @@ ${editableEntriesText}
                 : '';
         const currentPosition = entry.position ?? WORLDBOOK_POSITIONS.before;
         const currentRole = entry.role ?? WORLDBOOK_DEPTH_ROLES.system;
-        const currentOrder = Number.isFinite(Number(entry.insertion_order)) ? Number(entry.insertion_order) : 100;
+        const currentOrder = hasOrder ? Number(entry.insertion_order) : 100;
+        const positionText = hasPosition || !entry.keep_placement
+            ? getWorldbookPositionLabel(currentPosition, currentRole, entry.outlet_name)
+            : '保持原设置';
+        const orderText = hasOrder || !entry.keep_placement ? String(currentOrder) : '保持原设置';
         const positionOptionsHtml = renderWorldbookSelectOptions(getWorldbookPositionOptions(entry), currentPosition, currentRole);
 
         return `
@@ -4422,8 +4482,8 @@ ${editableEntriesText}
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">主关键词</span><span>${escapeHtml(keysText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">次关键词</span><span>${escapeHtml(secondaryText)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">触发方式</span><span class="fmg-worldbook-trigger-value">${escapeHtml(triggerMode)}</span></div>
-                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">注入位置</span><span class="fmg-worldbook-position-value">${escapeHtml(getWorldbookPositionLabel(currentPosition, currentRole, entry.outlet_name))}</span></div>
-                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">插入顺序</span><span class="fmg-worldbook-order-value">${escapeHtml(String(currentOrder))}</span></div>
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">注入位置</span><span class="fmg-worldbook-position-value">${escapeHtml(positionText)}</span></div>
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">插入顺序</span><span class="fmg-worldbook-order-value">${escapeHtml(orderText)}</span></div>
                     ${positionDetail ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">位置细节</span><span>${escapeHtml(positionDetail)}</span></div>` : ''}
                     ${entry.placement_reason ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">放置理由</span><span>${escapeHtml(entry.placement_reason)}</span></div>` : ''}
                 </div>
@@ -4453,7 +4513,7 @@ ${editableEntriesText}
                     </div>
                     <div class="fmg-worldbook-control-row">
                         <label class="fmg-worldbook-control-label" for="fmg-worldbook-order-${escapeHtml(entryKey)}">顺序</label>
-                        <input class="fmg-worldbook-input fmg-worldbook-order-input" id="fmg-worldbook-order-${escapeHtml(entryKey)}" data-entry-key="${entryKey}" type="number" step="1" value="${escapeHtml(String(currentOrder))}">
+                        <input class="fmg-worldbook-input fmg-worldbook-order-input" id="fmg-worldbook-order-${escapeHtml(entryKey)}" data-entry-key="${entryKey}" type="number" step="1" value="${hasOrder || !entry.keep_placement ? escapeHtml(String(currentOrder)) : ''}" placeholder="保持原顺序">
                     </div>
                 </div>
                 <div class="fmg-edit-card-actions">
@@ -4499,7 +4559,8 @@ ${editableEntriesText}
                     outlet_name: entry.outlet_name,
                     placement_reason: entry.placement_reason,
                     insertion_order: entry.insertion_order,
-                    enabled: entry.enabled
+                    enabled: entry.enabled,
+                    keep_placement: entry.keep_placement === true
                 };
             }
             html += renderWorldbookEntryCard(entry, entryKey);
