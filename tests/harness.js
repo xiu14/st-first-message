@@ -41,7 +41,7 @@ function loadExtension({ characters = [createCharacter()], characterId = 0, worl
     });
     const w = dom.window;
 
-    const calls = { fetch: [], toasts: [], savedWorlds: [], selectCharacterById: [], requests: [] };
+    const calls = { fetch: [], toasts: [], savedWorlds: [], selectCharacterById: [], errors: [] };
     let savedWorld = null;
 
     const context = {
@@ -73,6 +73,7 @@ function loadExtension({ characters = [createCharacter()], characterId = 0, worl
     w.confirm = () => true;
     w.console.warn = () => {};
     w.console.log = () => {};
+    w.console.error = (...args) => calls.errors.push(args);
 
     // 默认的 fetch：世界书读取返回当前世界书，角色保存返回成功；测试可覆盖 w.__fetchHandler
     w.fetch = async (url, options = {}) => {

@@ -97,7 +97,17 @@
         talkativeness: 'extensions.talkativeness'
     };
 
-    const TOP_LEVEL_CHARACTER_FIELDS = new Set(['description', 'personality', 'scenario', 'first_mes', 'mes_example']);
+    // data 字段在 ST 角色对象顶层的对应属性（ST 的角色编辑面板读这些属性）
+    const TOP_LEVEL_CHARACTER_FIELDS = {
+        description: 'description',
+        personality: 'personality',
+        scenario: 'scenario',
+        first_mes: 'first_mes',
+        mes_example: 'mes_example',
+        creator_notes: 'creatorcomment',
+        tags: 'tags',
+        'extensions.talkativeness': 'talkativeness'
+    };
 
     const WORLDBOOK_POSITIONS = {
         before: 0,
@@ -2790,7 +2800,10 @@ ${editableEntriesText}
             }
         }
 
-        if (editApplied > 0) updateDiscussPanel();
+        if (editApplied > 0) {
+            updateDiscussPanel();
+            await refreshCharacterEditor();
+        }
         if (latestContext) await loadWorldInfoList(latestContext, true);
         requestDiscussTokenCountUpdate();
 
@@ -2833,15 +2846,37 @@ ${editableEntriesText}
         `;
     }
 
+    // 写入前确认 ST 当前角色仍是插件读取数据时的那个角色，防止把修改写到别的角色上
+    function getCurrentCharacterForWrite(context) {
+        if (context.characterId === undefined) throw new Error('未选择角色');
+
+        const char = context.characters[context.characterId];
+        if (!char) throw new Error('角色数据不存在');
+
+        const loadedAvatar = window._fmgCharData?.avatar;
+        if (loadedAvatar && char.avatar !== loadedAvatar) {
+            throw new Error('当前角色已切换，请点击刷新后再应用');
+        }
+        return char;
+    }
+
+    // 角色卡保存后重新选中当前角色，让 ST 角色编辑面板显示新值；
+    // 否则之后在面板里编辑任意字段时，ST 会把面板里的旧值整体保存回去
+    async function refreshCharacterEditor() {
+        try {
+            const context = SillyTavern.getContext();
+            if (context.characterId === undefined || typeof context.selectCharacterById !== 'function') return;
+            await context.selectCharacterById(Number(context.characterId), { switchMenu: false });
+        } catch (error) {
+            console.warn('[开场白生成器] 刷新角色编辑面板失败:', error);
+        }
+    }
+
     // silent: 批量应用时由调用方统一刷新面板和提示；返回是否成功
     async function applyCharacterEdit(field, newValue, buttonEl, { silent = false } = {}) {
         try {
             const context = SillyTavern.getContext();
-            if (context.characterId === undefined) throw new Error('未选择角色');
-
-            const char = context.characters[context.characterId];
-            if (!char) throw new Error('角色数据不存在');
-
+            const char = getCurrentCharacterForWrite(context);
             if (!char.data) char.data = {};
 
             const dataPath = normalizeEditFieldName(field);
@@ -2850,12 +2885,7 @@ ${editableEntriesText}
             const currentValue = getNestedValue(char.data, dataPath);
             const parsedValue = parseEditFieldValue(dataPath, newValue, currentValue);
 
-            setNestedValue(char.data, dataPath, parsedValue);
-            if (TOP_LEVEL_CHARACTER_FIELDS.has(dataPath)) {
-                char[dataPath] = parsedValue;
-            }
-
-            // 调用 SillyTavern API 保存
+            // 调用 SillyTavern API 保存，成功后再更新内存，避免保存失败时内存与服务器不一致
             const headers = typeof context.getRequestHeaders === 'function'
                 ? context.getRequestHeaders()
                 : { 'Content-Type': 'application/json' };
@@ -2872,6 +2902,11 @@ ${editableEntriesText}
             if (!response.ok) {
                 const errText = await response.text();
                 throw new Error(`HTTP ${response.status}: ${errText}`);
+            }
+
+            setNestedValue(char.data, dataPath, parsedValue);
+            if (TOP_LEVEL_CHARACTER_FIELDS[dataPath]) {
+                char[TOP_LEVEL_CHARACTER_FIELDS[dataPath]] = parsedValue;
             }
 
             // 更新缓存
@@ -2906,6 +2941,7 @@ ${editableEntriesText}
 
             if (!silent) {
                 updateDiscussPanel();
+                await refreshCharacterEditor();
                 if (typeof toastr !== 'undefined') toastr.success(`${getEditFieldLabel(dataPath)} 已更新`);
             }
             return true;
@@ -3512,9 +3548,7 @@ ${editableEntriesText}
 
     async function persistWorldbookEntryUnlocked(entryData) {
         const context = SillyTavern.getContext();
-        if (context.characterId === undefined) throw new Error('未选择角色');
-
-        const char = context.characters[context.characterId];
+        const char = getCurrentCharacterForWrite(context);
         const worldName = char?.data?.extensions?.world;
         if (!worldName) throw new Error('角色未关联外部世界书，请先在角色卡中关联世界书');
         if (!entryData.constant && (!entryData.keys || entryData.keys.length === 0)) {
