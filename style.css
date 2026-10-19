@@ -499,6 +499,7 @@
     margin: 0;
     color: #fff;
     font-size: 15px;
+    transition: all 0.3s ease;
 }
 
 .fmg-preview-body {
@@ -974,11 +975,6 @@
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
-}
-
-/* 生成中头部标题 */
-.fmg-preview-header h4 {
-    transition: all 0.3s ease;
 }
 
 /* ========================================
