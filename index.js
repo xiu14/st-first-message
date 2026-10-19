@@ -1067,6 +1067,11 @@
                 return;
             }
 
+            if (e.target.id === 'fmg-chat-session-new') {
+                if (startNewChatSession(modal.dataset.sessionType)) modal.remove();
+                return;
+            }
+
             if (e.target.id === 'fmg-chat-session-load') {
                 const checked = modal.querySelector('input[name="fmg-chat-session-choice"]:checked');
                 if (!checked) return;
@@ -2436,7 +2441,10 @@
                 <div class="fmg-select-body fmg-chat-session-modal-body" id="fmg-chat-session-body"></div>
                 <div class="fmg-select-footer">
                     <span class="fmg-select-info">每个角色保留最近 ${CHAT_SESSION_HISTORY_LIMIT} 个会话</span>
-                    <button class="fmg-btn fmg-btn-primary" id="fmg-chat-session-load">进入所选</button>
+                    <div class="fmg-btn-group">
+                        <button class="fmg-btn fmg-btn-secondary" id="fmg-chat-session-new" title="开始一个空白会话，当前会话仍保留在最近会话中">＋ 新建会话</button>
+                        <button class="fmg-btn fmg-btn-primary" id="fmg-chat-session-load">进入所选</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -2491,6 +2499,24 @@
         config.updatePanel();
         config.requestToken();
         showStatus(config.statusId, 'success', '已进入最近会话');
+    }
+
+    function startNewChatSession(type) {
+        const config = getChatSessionConfig(type);
+        if (config.loadBlocked()) {
+            showStatus(config.statusId, 'error', '请先等待当前操作完成，再新建会话');
+            return false;
+        }
+
+        // 清空只重置当前会话，已保存的记录仍保留在最近会话中
+        saveChatSession(type);
+        if (type === 'worldbook') {
+            clearWorldbookDiscussion();
+        } else {
+            clearDiscussion();
+        }
+        showStatus(config.statusId, 'success', '已新建会话，之前的会话仍可在「最近会话」中进入');
+        return true;
     }
 
     function pruneDiscussWorldbookSelection() {
