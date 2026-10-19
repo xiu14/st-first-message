@@ -1128,6 +1128,14 @@
             }
         });
 
+        // 讨论回复 - 全部应用（修改 + 世界书条目）
+        document.addEventListener('click', (e) => {
+            const applyAllBtn = e.target.closest('.fmg-chat-apply-all');
+            if (applyAllBtn && !applyAllBtn.disabled) {
+                applyAllDiscussCards(applyAllBtn);
+            }
+        });
+
         // 编辑卡片 - 忽略
         document.addEventListener('click', (e) => {
             const ignoreBtn = e.target.closest('.fmg-edit-ignore');
@@ -2622,10 +2630,10 @@
         const visibleMessages = discussMessages.filter(msg => msg.role !== 'system');
 
         window._fmgPendingEdits = {};
-        window._fmgPendingWorldbookEntries = {};
+        clearPendingWorldbookEntries(DISCUSS_WORLDBOOK_KEY_PREFIX);
         window._fmgPendingFirstMessagePlans = {};
         _editIdCounter = 0;
-        _worldbookEntryIdCounter = 0;
+        _discussWorldbookEntryIdCounter = 0;
         _firstMessagePlanIdCounter = 0;
         container.innerHTML = '';
 
@@ -3315,6 +3323,8 @@ ${editableEntriesText}
 
         let html = '';
         let lastIndex = 0;
+        let editCount = 0;
+        let worldbookCount = 0;
 
         for (const block of blocks) {
             if (block.start < lastIndex) continue;
@@ -3330,6 +3340,7 @@ ${editableEntriesText}
                 const edit = block.data;
                 const editKey = 'edit_' + (++_editIdCounter);
                 window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
+                editCount++;
                 html += renderEditCard(edit, editKey);
             } else if (block.type === 'first-message-plan') {
                 const plan = block.data;
@@ -3346,8 +3357,9 @@ ${editableEntriesText}
                 html += renderFirstMessagePlanCard(plan, planKey);
             } else {
                 const entry = block.data;
-                const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
+                const entryKey = DISCUSS_WORLDBOOK_KEY_PREFIX + (++_discussWorldbookEntryIdCounter);
                 if (!entry.invalid) {
+                    worldbookCount++;
                     window._fmgPendingWorldbookEntries[entryKey] = {
                         operation: entry.operation,
                         uid: entry.uid,
@@ -3378,7 +3390,107 @@ ${editableEntriesText}
                 html += '<div class="fmg-chat-plain">' + escapeHtml(remaining) + '</div>';
             }
         }
+
+        if (editCount + worldbookCount >= 2) {
+            html += renderApplyAllBar(editCount, worldbookCount);
+        }
         return html;
+    }
+
+    function renderApplyAllBar(editCount, worldbookCount) {
+        const summary = [
+            editCount > 0 ? `${editCount} 项修改` : '',
+            worldbookCount > 0 ? `${worldbookCount} 个世界书条目` : ''
+        ].filter(Boolean).join('、');
+
+        return `
+            <div class="fmg-chat-apply-all-bar">
+                <span class="fmg-chat-apply-all-summary">本条回复共 ${summary}</span>
+                <button class="fmg-btn fmg-btn-primary fmg-chat-apply-all" title="按顺序应用本条回复中所有未应用、未忽略的修改和世界书条目">✅ 全部应用</button>
+            </div>
+        `;
+    }
+
+    function markWorldbookCardApplied(card, isUpdate) {
+        if (!card) return;
+        card.classList.add('applied');
+        const actionsEl = card.querySelector('.fmg-edit-card-actions');
+        if (actionsEl) actionsEl.innerHTML = `<span class="fmg-edit-applied-badge">✅ 已${isUpdate ? '更新' : '添加'}到世界书</span>`;
+    }
+
+    async function applyAllDiscussCards(buttonEl) {
+        const scope = buttonEl.closest('.fmg-chat-text');
+        if (!scope) return;
+
+        const cards = Array.from(scope.querySelectorAll('.fmg-edit-card[data-edit-key], .fmg-worldbook-card[data-entry-key]'))
+            .filter(card => !card.classList.contains('applied') && !card.classList.contains('ignored'));
+
+        if (cards.length === 0) {
+            showStatus('fmg-discuss-status', 'success', '本条回复没有待应用的修改或条目');
+            return;
+        }
+
+        buttonEl.disabled = true;
+        buttonEl.textContent = '⏳ 应用中...';
+
+        let editApplied = 0;
+        let worldbookApplied = 0;
+        let latestContext = null;
+        const failures = [];
+
+        for (const card of cards) {
+            const isEdit = card.classList.contains('fmg-edit-card');
+            const cardBtn = card.querySelector(isEdit ? '.fmg-edit-apply' : '.fmg-worldbook-apply');
+            // 单条按钮已禁用说明它正在单独应用中，跳过避免重复写入
+            if (!cardBtn || cardBtn.disabled) continue;
+
+            if (isEdit) {
+                const editData = window._fmgPendingEdits?.[cardBtn.dataset.editKey];
+                if (!editData) continue;
+                cardBtn.disabled = true;
+                cardBtn.textContent = '⏳ 应用中...';
+                const ok = await applyCharacterEdit(editData.field, editData.content, cardBtn, { silent: true });
+                if (ok) {
+                    editApplied++;
+                } else {
+                    failures.push(getEditFieldLabel(editData.field));
+                }
+            } else {
+                const entryData = window._fmgPendingWorldbookEntries?.[cardBtn.dataset.entryKey];
+                if (!entryData) continue;
+                cardBtn.disabled = true;
+                cardBtn.textContent = '⏳ 添加中...';
+                try {
+                    const result = await persistWorldbookEntry(entryData);
+                    latestContext = result.context;
+                    markWorldbookCardApplied(card, result.isUpdate);
+                    worldbookApplied++;
+                } catch (error) {
+                    console.error('[开场白生成器] 批量添加世界书条目失败:', error);
+                    failures.push(`${entryData.comment || '未命名条目'}（${error.message}）`);
+                    cardBtn.textContent = '⚠️ 重试';
+                    cardBtn.disabled = false;
+                }
+            }
+        }
+
+        if (editApplied > 0) updateDiscussPanel();
+        if (latestContext) await loadWorldInfoList(latestContext, true);
+        requestDiscussTokenCountUpdate();
+        requestWorldbookTokenCountUpdate();
+
+        const doneText = `已应用 ${editApplied} 项修改、${worldbookApplied} 个世界书条目`;
+        if (failures.length > 0) {
+            showStatus('fmg-discuss-status', 'error', `${doneText}；${failures.length} 项失败：${failures.join('；')}`);
+            if (typeof toastr !== 'undefined') toastr.warning(`${doneText}，${failures.length} 项失败`);
+            buttonEl.disabled = false;
+            buttonEl.textContent = '⚠️ 重试失败项';
+        } else {
+            showStatus('fmg-discuss-status', 'success', doneText);
+            if (typeof toastr !== 'undefined') toastr.success(doneText);
+            const bar = buttonEl.closest('.fmg-chat-apply-all-bar');
+            if (bar) bar.innerHTML = '<span class="fmg-edit-applied-badge">✅ 已全部应用</span>';
+        }
     }
 
     function renderEditCard(edit, editKey) {
@@ -3406,7 +3518,8 @@ ${editableEntriesText}
         `;
     }
 
-    async function applyCharacterEdit(field, newValue, buttonEl) {
+    // silent: 批量应用时由调用方统一刷新面板和提示；返回是否成功
+    async function applyCharacterEdit(field, newValue, buttonEl, { silent = false } = {}) {
         try {
             const context = SillyTavern.getContext();
             if (context.characterId === undefined) throw new Error('未选择角色');
@@ -3476,16 +3589,20 @@ ${editableEntriesText}
                 }
             }
 
-            updateDiscussPanel();
-            if (typeof toastr !== 'undefined') toastr.success(`${getEditFieldLabel(dataPath)} 已更新`);
+            if (!silent) {
+                updateDiscussPanel();
+                if (typeof toastr !== 'undefined') toastr.success(`${getEditFieldLabel(dataPath)} 已更新`);
+            }
+            return true;
 
         } catch (e) {
             console.error('[开场白生成器] 应用修改失败:', e);
-            if (typeof toastr !== 'undefined') toastr.error('应用修改失败: ' + e.message);
+            if (!silent && typeof toastr !== 'undefined') toastr.error('应用修改失败: ' + e.message);
             if (buttonEl) {
                 buttonEl.textContent = '⚠️ 重试';
                 buttonEl.disabled = false;
             }
+            return false;
         }
     }
 
@@ -3493,8 +3610,18 @@ ${editableEntriesText}
     // 世界书讨论与条目应用
     // ========================================
 
+    // 讨论页与世界书页共用待应用条目表，用前缀区分，避免一页重渲染时清掉另一页的条目
     window._fmgPendingWorldbookEntries = {};
+    const WORLDBOOK_TAB_KEY_PREFIX = 'worldbook_';
+    const DISCUSS_WORLDBOOK_KEY_PREFIX = 'discuss_worldbook_';
     let _worldbookEntryIdCounter = 0;
+    let _discussWorldbookEntryIdCounter = 0;
+
+    function clearPendingWorldbookEntries(prefix) {
+        Object.keys(window._fmgPendingWorldbookEntries).forEach(key => {
+            if (key.startsWith(prefix)) delete window._fmgPendingWorldbookEntries[key];
+        });
+    }
 
     function getWorldbookWelcomeHtml() {
         return `
@@ -3541,7 +3668,7 @@ ${editableEntriesText}
         if (!container) return;
 
         const visibleMessages = worldbookMessages.filter(msg => msg.role !== 'system');
-        window._fmgPendingWorldbookEntries = {};
+        clearPendingWorldbookEntries(WORLDBOOK_TAB_KEY_PREFIX);
         _worldbookEntryIdCounter = 0;
         container.innerHTML = '';
 
@@ -4328,7 +4455,7 @@ ${editableEntriesText}
                 }
             }
 
-            const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
+            const entryKey = WORLDBOOK_TAB_KEY_PREFIX + (++_worldbookEntryIdCounter);
             if (!entry.invalid) {
                 window._fmgPendingWorldbookEntries[entryKey] = {
                     operation: entry.operation,
@@ -4788,12 +4915,7 @@ ${editableEntriesText}
             const result = await persistWorldbookEntry(entryData);
 
             if (buttonEl) {
-                const card = buttonEl.closest('.fmg-worldbook-card');
-                if (card) {
-                    card.classList.add('applied');
-                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = `<span class="fmg-edit-applied-badge">✅ 已${result.isUpdate ? '更新' : '添加'}到世界书</span>`;
-                }
+                markWorldbookCardApplied(buttonEl.closest('.fmg-worldbook-card'), result.isUpdate);
             }
 
             showStatus(statusId, 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);

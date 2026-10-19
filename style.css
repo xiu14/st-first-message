@@ -1741,6 +1741,31 @@
     font-size: 12px;
 }
 
+/* 讨论回复 - 全部应用 */
+.fmg-chat-apply-all-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px dashed rgba(100, 255, 218, 0.35);
+    border-radius: 6px;
+    background: rgba(100, 255, 218, 0.05);
+}
+
+.fmg-chat-apply-all-summary {
+    margin-right: auto;
+    font-size: 12px;
+    color: #aaa;
+}
+
+.fmg-chat-apply-all-bar .fmg-btn {
+    padding: 5px 14px;
+    font-size: 12px;
+}
+
 /* 已应用状态 */
 .fmg-edit-card.applied {
     border-color: rgba(100, 255, 150, 0.35);
