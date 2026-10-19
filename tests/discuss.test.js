@@ -44,7 +44,7 @@ test('讨论回复：全部应用按钮按顺序应用修改和条目，跳过�
     const entries = Object.values(env.getSavedWorld().entries);
     assert.ok(entries.some(e => e.comment === '条目一'));
     assert.ok(!entries.some(e => e.comment === '条目二'), '已忽略的条目不应保存');
-    assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /已全部应用/);
+    assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /已全部处理/);
 });
 
 test('会话：新建会话保留旧会话，进入所选能恢复', async () => {
@@ -179,4 +179,38 @@ test('事件：输入法组字时按回车不发送', async () => {
     input.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flush(50);
     assert.equal(env.fmg("discussMessages.filter(m => m.role === 'assistant').length"), 1);
+});
+
+test('卡片的应用/忽略状态在重新渲染和切换会话后保留', async () => {
+    const env = await openWithCharacter();
+    const { document, fmg } = env;
+    const content = [
+        '[EDIT:description]新描述[/EDIT]',
+        wbBlock({ operation: 'create', comment: '条目一', keys: ['k1'], content: '内容一' }),
+        wbBlock({ operation: 'create', comment: '条目二', keys: ['k2'], content: '内容二' })
+    ].join('\n');
+    fmg(`discussMessages = [createChatMessage('user', '问'), createChatMessage('assistant', ${JSON.stringify(content)})]; saveChatSession(); renderDiscussionHistory();`);
+    const sessionId = fmg('currentDiscussSessionId');
+
+    document.querySelector('.fmg-edit-apply').click();
+    await flush(30);
+    document.querySelectorAll('.fmg-worldbook-card')[1].querySelector('.fmg-worldbook-ignore').click();
+
+    fmg('renderDiscussionHistory()');
+    const cards = () => Array.from(document.querySelectorAll('[data-card-index]'));
+    assert.deepEqual(cards().map(c => c.className.match(/applied|ignored/)?.[0] || 'pending'), ['applied', 'pending', 'ignored']);
+
+    // 切到新会话再切回来
+    fmg('startNewChatSession()');
+    assert.equal(cards().length, 0);
+    fmg(`loadChatSession('${sessionId}')`);
+    assert.deepEqual(cards().map(c => c.className.match(/applied|ignored/)?.[0] || 'pending'), ['applied', 'pending', 'ignored']);
+    assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /全部应用/);
+
+    // 剩下的一张也处理掉后，全部应用栏显示已全部处理
+    document.querySelectorAll('.fmg-worldbook-card')[0].querySelector('.fmg-worldbook-apply').click();
+    await flush(50);
+    fmg('renderDiscussionHistory()');
+    assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /已全部处理/);
+    assert.equal(document.querySelector('.fmg-chat-apply-all'), null);
 });

@@ -753,13 +753,6 @@
     // 只处理插件自己界面内的事件，避免 ST 页面上任何操作都触发保存或 token 统计
     const FMG_EVENT_SCOPE = '#fmg-popup, #fmg-overlay, #fmg-chat-session-modal';
 
-    function markCardIgnored(card) {
-        if (!card) return;
-        card.classList.add('ignored');
-        const actionsEl = card.querySelector('.fmg-edit-card-actions');
-        if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
-    }
-
     function toggleCollapse(header, body) {
         if (!body) return;
         const isOpen = body.classList.toggle('open');
@@ -842,7 +835,7 @@
             applyFirstMessagePlan(planData, el);
         }],
         ['.fmg-edit-ignore, .fmg-worldbook-ignore, .fmg-first-message-plan-ignore', (el) => {
-            markCardIgnored(el.closest('.fmg-edit-card, .fmg-worldbook-card, .fmg-first-message-plan-card'));
+            setCardState(el.closest('.fmg-edit-card, .fmg-worldbook-card, .fmg-first-message-plan-card'), 'ignored');
         }],
         ['.fmg-edit-card-old .fmg-edit-card-label', (el) => toggleCollapse(el, el.nextElementSibling)],
         ['.fmg-collapse-header, .fmg-sb-preview-header', (el) => toggleCollapse(el, document.getElementById(el.dataset.target))],
@@ -1821,7 +1814,8 @@
             .map(message => ({
                 id: message.id || '',
                 role: message.role,
-                content: String(message.content || '')
+                content: String(message.content || ''),
+                ...(message.cardStates ? { cardStates: { ...message.cardStates } } : {})
             }));
     }
 
@@ -2399,7 +2393,13 @@ ${editableEntriesText}
             textEl.innerHTML = escapeHtml(content) + '<span class="fmg-cursor">▌</span>';
         } else {
             bubble.dataset.messageId = messageId || '';
-            textEl.innerHTML = role === 'assistant' ? renderAssistantContent(content) : escapeHtml(content);
+            if (role === 'assistant') {
+                textEl.innerHTML = renderAssistantContent(content);
+                const message = messageId && discussMessages.find(msg => msg.id === messageId);
+                restoreCardStates(textEl, message?.cardStates);
+            } else {
+                textEl.innerHTML = escapeHtml(content);
+            }
             bubble.classList.remove('streaming');
         }
 
@@ -2617,7 +2617,7 @@ ${editableEntriesText}
         return parts.join('\n\n').trim();
     }
 
-    function renderFirstMessagePlanCard(plan, planKey) {
+    function renderFirstMessagePlanCard(plan, planKey, cardIndex) {
         if (plan.invalid) {
             return `
                 <div class="fmg-first-message-plan-card invalid">
@@ -2639,7 +2639,7 @@ ${editableEntriesText}
         const requestText = buildFirstMessageRequestFromPlan(plan);
 
         return `
-            <div class="fmg-first-message-plan-card" data-plan-key="${planKey}">
+            <div class="fmg-first-message-plan-card" data-plan-key="${planKey}" data-card-index="${cardIndex}">
                 <div class="fmg-first-message-plan-header">📝 ${escapeHtml(plan.title || '开场白生成大纲')}</div>
                 <div class="fmg-worldbook-meta">
                     ${plan.style ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">风格</span><span>${escapeHtml(plan.style)}</span></div>` : ''}
@@ -2719,9 +2719,12 @@ ${editableEntriesText}
         let lastIndex = 0;
         let editCount = 0;
         let worldbookCount = 0;
+        // 卡片在本条回复中的序号，用于把应用/忽略状态存进会话
+        let cardIndex = 0;
 
         for (const block of blocks) {
             if (block.start < lastIndex) continue;
+            cardIndex++;
 
             if (block.start > lastIndex) {
                 const plainText = content.substring(lastIndex, block.start).trim();
@@ -2735,7 +2738,7 @@ ${editableEntriesText}
                 const editKey = 'edit_' + (++_editIdCounter);
                 window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
                 editCount++;
-                html += renderEditCard(edit, editKey);
+                html += renderEditCard(edit, editKey, cardIndex);
             } else if (block.type === 'first-message-plan') {
                 const plan = block.data;
                 const planKey = 'first_message_plan_' + (++_firstMessagePlanIdCounter);
@@ -2748,7 +2751,7 @@ ${editableEntriesText}
                         notes: plan.notes
                     };
                 }
-                html += renderFirstMessagePlanCard(plan, planKey);
+                html += renderFirstMessagePlanCard(plan, planKey, cardIndex);
             } else {
                 const entry = block.data;
                 const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
@@ -2774,7 +2777,7 @@ ${editableEntriesText}
                         keep_placement: entry.keep_placement === true
                     };
                 }
-                html += renderWorldbookEntryCard(entry, entryKey);
+                html += renderWorldbookEntryCard(entry, entryKey, cardIndex);
             }
             lastIndex = block.end;
         }
@@ -2806,11 +2809,54 @@ ${editableEntriesText}
         `;
     }
 
-    function markWorldbookCardApplied(card, isUpdate) {
-        if (!card) return;
-        card.classList.add('applied');
+    const CARD_STATE_BADGES = {
+        applied: '<span class="fmg-edit-applied-badge">✅ 已应用</span>',
+        added: '<span class="fmg-edit-applied-badge">✅ 已添加到世界书</span>',
+        updated: '<span class="fmg-edit-applied-badge">✅ 已更新到世界书</span>',
+        ignored: '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>'
+    };
+
+    /**
+     * 把卡片标记为已应用/已添加/已更新/已忽略。
+     * record 为 true 时把状态记到所属消息上并保存会话，重新渲染或切换会话后仍保留。
+     */
+    function setCardState(card, state, { record = true } = {}) {
+        if (!card || !CARD_STATE_BADGES[state]) return;
+        card.classList.add(state === 'ignored' ? 'ignored' : 'applied');
         const actionsEl = card.querySelector('.fmg-edit-card-actions');
-        if (actionsEl) actionsEl.innerHTML = `<span class="fmg-edit-applied-badge">✅ 已${isUpdate ? '更新' : '添加'}到世界书</span>`;
+        if (actionsEl) actionsEl.innerHTML = CARD_STATE_BADGES[state];
+        if (record) recordCardState(card, state);
+        refreshApplyAllBar(card.closest('.fmg-chat-text'));
+    }
+
+    function recordCardState(card, state) {
+        const messageId = card.closest('.fmg-chat-bubble')?.dataset.messageId;
+        const cardIndex = card.dataset.cardIndex;
+        const message = messageId && discussMessages.find(msg => msg.id === messageId);
+        if (!message || cardIndex === undefined) return;
+
+        message.cardStates = { ...(message.cardStates || {}), [cardIndex]: state };
+        saveChatSession();
+    }
+
+    function restoreCardStates(textEl, cardStates) {
+        if (!textEl || !cardStates) return;
+        textEl.querySelectorAll('[data-card-index]').forEach(card => {
+            const state = cardStates[card.dataset.cardIndex];
+            if (state) setCardState(card, state, { record: false });
+        });
+    }
+
+    // 本条回复的卡片都处理完后，把「全部应用」栏换成完成提示
+    function refreshApplyAllBar(textEl) {
+        const bar = textEl?.querySelector('.fmg-chat-apply-all-bar');
+        if (!bar) return;
+        const pending = textEl.querySelectorAll(
+            '.fmg-edit-card[data-edit-key]:not(.applied):not(.ignored), .fmg-worldbook-card[data-entry-key]:not(.applied):not(.ignored)'
+        ).length;
+        if (pending === 0) {
+            bar.innerHTML = '<span class="fmg-edit-applied-badge">✅ 已全部处理</span>';
+        }
     }
 
     async function applyAllDiscussCards(buttonEl) {
@@ -2858,7 +2904,7 @@ ${editableEntriesText}
                 try {
                     const result = await persistWorldbookEntry(entryData);
                     latestContext = result.context;
-                    markWorldbookCardApplied(card, result.isUpdate);
+                    setCardState(card, result.isUpdate ? 'updated' : 'added');
                     worldbookApplied++;
                 } catch (error) {
                     console.error('[开场白生成器] 批量添加世界书条目失败:', error);
@@ -2885,17 +2931,15 @@ ${editableEntriesText}
         } else {
             showStatus('fmg-discuss-status', 'success', doneText);
             if (typeof toastr !== 'undefined') toastr.success(doneText);
-            const bar = buttonEl.closest('.fmg-chat-apply-all-bar');
-            if (bar) bar.innerHTML = '<span class="fmg-edit-applied-badge">✅ 已全部应用</span>';
         }
     }
 
-    function renderEditCard(edit, editKey) {
+    function renderEditCard(edit, editKey, cardIndex) {
         const fieldLabel = getEditFieldLabel(edit.field);
         const currentValue = window._fmgCharData ? getCharacterDataFieldValue(edit.field) : '（无角色数据）';
 
         return `
-            <div class="fmg-edit-card" data-edit-key="${editKey}">
+            <div class="fmg-edit-card" data-edit-key="${editKey}" data-card-index="${cardIndex}">
                 <div class="fmg-edit-card-header">
                     <span>✏️ 修改建议：${escapeHtml(fieldLabel)} (${escapeHtml(edit.field)})</span>
                 </div>
@@ -3000,12 +3044,7 @@ ${editableEntriesText}
 
             // 更新卡片状态
             if (buttonEl) {
-                const card = buttonEl.closest('.fmg-edit-card');
-                if (card) {
-                    card.classList.add('applied');
-                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-applied-badge">✅ 已应用</span>';
-                }
+                setCardState(buttonEl.closest('.fmg-edit-card'), 'applied');
             }
 
             if (!silent) {
@@ -3442,7 +3481,7 @@ ${editableEntriesText}
         entry.placement_reason = '';
     }
 
-    function renderWorldbookEntryCard(entry, entryKey) {
+    function renderWorldbookEntryCard(entry, entryKey, cardIndex) {
         if (entry.invalid) {
             return `
                 <div class="fmg-worldbook-card invalid">
@@ -3480,7 +3519,7 @@ ${editableEntriesText}
         const positionOptionsHtml = renderWorldbookSelectOptions(getWorldbookPositionOptions(entry), currentPosition, currentRole);
 
         return `
-            <div class="fmg-worldbook-card" data-entry-key="${entryKey}">
+            <div class="fmg-worldbook-card" data-entry-key="${entryKey}" data-card-index="${cardIndex}">
                 <div class="fmg-worldbook-card-header">📚 世界书条目建议：${escapeHtml(entry.comment || '未命名条目')}</div>
                 <div class="fmg-worldbook-meta">
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">操作类型</span><span>${escapeHtml(modeLabel)}</span></div>
@@ -3713,7 +3752,7 @@ ${editableEntriesText}
             const result = await persistWorldbookEntry(entryData);
 
             if (buttonEl) {
-                markWorldbookCardApplied(buttonEl.closest('.fmg-worldbook-card'), result.isUpdate);
+                setCardState(buttonEl.closest('.fmg-worldbook-card'), result.isUpdate ? 'updated' : 'added');
             }
 
             showStatus(statusId, 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
