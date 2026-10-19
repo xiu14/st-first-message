@@ -839,6 +839,49 @@
     white-space: nowrap;
 }
 
+.fmg-select-meta {
+    margin: 2px 0 0 24px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--SmartThemeQuoteColor, #999);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fmg-select-search {
+    padding: 8px 8px 0;
+    flex-shrink: 0;
+}
+
+.fmg-select-search input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+}
+
+.fmg-select-empty {
+    padding: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--SmartThemeQuoteColor, #888);
+}
+
+.fmg-badge-green {
+    background: rgba(100, 255, 150, 0.15);
+    color: #64ff96;
+}
+
+.fmg-badge-role {
+    background: rgba(100, 200, 255, 0.2);
+    color: #64c8ff;
+}
+
 .fmg-select-footer {
     display: flex;
     justify-content: space-between;

@@ -1534,6 +1534,51 @@
         updateDiscussWiCount();
     }
 
+    function renderSelectionItem(entry, index, isWorldInfo, savedSelections) {
+        const name = isWorldInfo
+            ? (entry.name || `条目${index + 1}`)
+            : (entry.name || entry.identifier || `条目${index + 1}`);
+        const identifier = isWorldInfo
+            ? getWorldInfoIdentifier(entry, index)
+            : (entry.identifier || entry.name || `prompt_${index}`);
+        const isEnabled = entry.enabled !== false;
+        const isChecked = isWorldInfo
+            ? isWorldInfoEntrySelected(entry, index, savedSelections)
+            : savedSelections.includes(identifier);
+
+        const badges = [];
+        let metaHtml = '';
+        if (isWorldInfo) {
+            badges.push(entry.constant ? '<span class="fmg-badge">常驻</span>' : '<span class="fmg-badge fmg-badge-green">绿灯</span>');
+            if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
+
+            const keysText = Array.isArray(entry.key) && entry.key.length > 0 ? entry.key.join(', ') : '';
+            const metaParts = [
+                `位置：${formatWorldInfoPlacement(entry)}`,
+                `顺序：${entry.order ?? '未知'}`,
+                keysText ? `关键词：${keysText}` : ''
+            ].filter(Boolean);
+            metaHtml = `<div class="fmg-select-meta">${escapeHtml(metaParts.join(' · '))}</div>`;
+        } else {
+            badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
+            if (entry.role) badges.push(`<span class="fmg-badge fmg-badge-role">${escapeHtml(entry.role)}</span>`);
+        }
+
+        // 搜索文本：名称、关键词和内容
+        const searchText = [name, ...(entry.key || []), entry.content || entry.prompt || ''].join('\n').toLowerCase();
+
+        return `
+            <div class="fmg-select-item" data-search="${escapeHtml(searchText)}">
+                <label>
+                    <input type="checkbox" class="fmg-select-cb" data-identifier="${escapeHtml(identifier)}" ${isChecked ? 'checked' : ''}>
+                    <span class="fmg-select-name">${escapeHtml(name)}</span>
+                    ${badges.join('')}
+                </label>
+                ${metaHtml}
+            </div>
+        `;
+    }
+
     function openSelectionModal(type) {
         // 移除已存在的弹窗
         const existing = document.getElementById('fmg-selection-modal');
@@ -1553,38 +1598,7 @@
             return;
         }
 
-        // 生成列表HTML
-        const listHtml = entries.map((entry, index) => {
-            const name = isWorldInfo
-                ? (entry.name || `条目${index + 1}`)
-                : (entry.name || entry.identifier || `条目${index + 1}`);
-            const identifier = isWorldInfo
-                ? getWorldInfoIdentifier(entry, index)
-                : (entry.identifier || entry.name || `prompt_${index}`);
-            const isEnabled = entry.enabled !== false;
-            const isChecked = isWorldInfo
-                ? isWorldInfoEntrySelected(entry, index, savedSelections)
-                : savedSelections.includes(identifier);
-
-            const badges = [];
-            if (isWorldInfo) {
-                if (entry.constant) badges.push('<span class="fmg-badge">常驻</span>');
-                if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
-            } else {
-                badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
-                if (entry.role) badges.push(`<span class="fmg-badge" style="background:rgba(100,200,255,0.2);color:#64c8ff;">${escapeHtml(entry.role)}</span>`);
-            }
-
-            return `
-                <div class="fmg-select-item">
-                    <label>
-                        <input type="checkbox" class="fmg-select-cb" data-identifier="${escapeHtml(identifier)}" ${isChecked ? 'checked' : ''}>
-                        <span class="fmg-select-name">${escapeHtml(name)}</span>
-                        ${badges.join('')}
-                    </label>
-                </div>
-            `;
-        }).join('');
+        const listHtml = entries.map((entry, index) => renderSelectionItem(entry, index, isWorldInfo, savedSelections)).join('');
 
         const modal = document.createElement('div');
         modal.id = 'fmg-selection-modal';
@@ -1594,12 +1608,16 @@
                 <div class="fmg-select-header">
                     <h4>${title}</h4>
                     <div class="fmg-btn-group">
-                        <button class="fmg-btn-small" id="fmg-select-all">全选</button>
-                        <button class="fmg-btn-small" id="fmg-select-none">清空</button>
+                        <button class="fmg-btn-small" id="fmg-select-all" title="勾选当前搜索结果中的全部条目">全选</button>
+                        <button class="fmg-btn-small" id="fmg-select-none" title="取消勾选当前搜索结果中的全部条目">清空</button>
                     </div>
+                </div>
+                <div class="fmg-select-search">
+                    <input type="search" id="fmg-select-search" placeholder="搜索名称、关键词或内容">
                 </div>
                 <div class="fmg-select-body">
                     ${listHtml}
+                    <div class="fmg-select-empty" style="display:none;">没有匹配的条目</div>
                 </div>
                 <div class="fmg-select-footer">
                     <span class="fmg-select-info" id="fmg-select-info">已选择 0 项</span>
@@ -1611,6 +1629,11 @@
             </div>
         `;
         document.body.appendChild(modal);
+
+        const items = Array.from(modal.querySelectorAll('.fmg-select-item'));
+        const visibleCheckboxes = () => items
+            .filter(item => item.style.display !== 'none')
+            .map(item => item.querySelector('.fmg-select-cb'));
 
         // 更新选中计数
         const updateSelectInfo = () => {
@@ -1624,13 +1647,24 @@
         modal.querySelector('.fmg-select-overlay').onclick = () => modal.remove();
         modal.querySelector('#fmg-select-cancel').onclick = () => modal.remove();
 
+        modal.querySelector('#fmg-select-search').oninput = (e) => {
+            const terms = e.target.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+            let visibleCount = 0;
+            items.forEach(item => {
+                const visible = terms.every(term => item.dataset.search.includes(term));
+                item.style.display = visible ? '' : 'none';
+                if (visible) visibleCount++;
+            });
+            modal.querySelector('.fmg-select-empty').style.display = visibleCount === 0 ? '' : 'none';
+        };
+
         modal.querySelector('#fmg-select-all').onclick = () => {
-            modal.querySelectorAll('.fmg-select-cb').forEach(cb => cb.checked = true);
+            visibleCheckboxes().forEach(cb => cb.checked = true);
             updateSelectInfo();
         };
 
         modal.querySelector('#fmg-select-none').onclick = () => {
-            modal.querySelectorAll('.fmg-select-cb').forEach(cb => cb.checked = false);
+            visibleCheckboxes().forEach(cb => cb.checked = false);
             updateSelectInfo();
         };
 
@@ -1655,7 +1689,6 @@
             if (isWorldInfo) {
                 requestDiscussTokenCountUpdate();
             }
-
         };
     }
 
