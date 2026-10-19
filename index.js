@@ -16,6 +16,8 @@
         apiKey: '',
         model: 'gpt-4o-mini',
         models: [],
+        temperature: 0.8,
+        maxTokens: null,
         // API 配置方案（可保存多套并切换）
         apiProfiles: [],
         activeApiProfileId: '',
@@ -214,7 +216,9 @@
                 apiUrl: settings.apiUrl || '',
                 apiKey: settings.apiKey || '',
                 model: settings.model || '',
-                models: Array.isArray(settings.models) ? [...settings.models] : []
+                models: Array.isArray(settings.models) ? [...settings.models] : [],
+                temperature: normalizeTemperature(settings.temperature),
+                maxTokens: normalizeMaxTokens(settings.maxTokens)
             };
             profiles.push(profile);
             settings.activeApiProfileId = profile.id;
@@ -234,6 +238,22 @@
         settings.apiKey = profile.apiKey || '';
         settings.model = profile.model || '';
         settings.models = Array.isArray(profile.models) ? [...profile.models] : [];
+        settings.temperature = normalizeTemperature(profile.temperature);
+        settings.maxTokens = normalizeMaxTokens(profile.maxTokens);
+    }
+
+    function normalizeTemperature(value) {
+        const num = Number(value);
+        if (value === '' || value === null || value === undefined || !Number.isFinite(num)) {
+            return DEFAULT_SETTINGS.temperature;
+        }
+        return Math.min(2, Math.max(0, num));
+    }
+
+    // 留空或非正数表示不限制，请求里不发送该参数
+    function normalizeMaxTokens(value) {
+        const num = Math.floor(Number(value));
+        return value !== '' && value !== null && Number.isFinite(num) && num > 0 ? num : null;
     }
 
     async function saveSettings() {
@@ -570,7 +590,7 @@
                     </div>
                     
                     <div class="fmg-form-group">
-                        <label>API Key</label>
+                        <label>API Key（本地模型可留空）</label>
                         <input type="password" id="fmg-api-key" placeholder="sk-...">
                     </div>
                     
@@ -582,6 +602,16 @@
                             </select>
                             <button class="fmg-btn fmg-btn-secondary" id="fmg-get-models">获取</button>
                         </div>
+                    </div>
+
+                    <div class="fmg-form-group">
+                        <label>温度（0~2，越高越发散）</label>
+                        <input type="number" id="fmg-api-temperature" min="0" max="2" step="0.1" placeholder="0.8">
+                    </div>
+
+                    <div class="fmg-form-group">
+                        <label>最大输出 token（留空不限制）</label>
+                        <input type="number" id="fmg-api-max-tokens" min="1" step="1" placeholder="不限制">
                     </div>
                     
                     <div class="fmg-actions">
@@ -606,7 +636,9 @@
             apiUrl: settings.apiUrl,
             apiKey: settings.apiKey,
             model: settings.model,
-            models: settings.models
+            models: settings.models,
+            temperature: settings.temperature,
+            maxTokens: settings.maxTokens
         });
 
         syncCharacterIncludeControls();
@@ -630,6 +662,8 @@
         document.getElementById('fmg-api-type').value = data.apiType || 'openai';
         document.getElementById('fmg-api-url').value = data.apiUrl || '';
         document.getElementById('fmg-api-key').value = data.apiKey || '';
+        document.getElementById('fmg-api-temperature').value = String(normalizeTemperature(data.temperature));
+        document.getElementById('fmg-api-max-tokens').value = normalizeMaxTokens(data.maxTokens) ?? '';
 
         const modelSelect = document.getElementById('fmg-model');
         modelSelect.innerHTML = '';
@@ -690,6 +724,8 @@
             settings.apiKey = '';
             settings.model = '';
             settings.models = [];
+            settings.temperature = DEFAULT_SETTINGS.temperature;
+            settings.maxTokens = null;
         }
         saveSettings();
         loadSettingsToForm();
@@ -3871,7 +3907,7 @@ ${editableEntriesText}
             showStatus('fmg-sb-status', 'error', '请描述你想要的状态栏');
             return;
         }
-        if (!settings.apiUrl || !settings.apiKey) {
+        if (!settings.apiUrl) {
             showStatus('fmg-sb-status', 'error', '请先在API页面配置API');
             return;
         }
@@ -4166,7 +4202,7 @@ ${designBrief}
         const userText = input.value.trim();
         if (!userText) return;
 
-        if (!settings.apiUrl || !settings.apiKey) {
+        if (!settings.apiUrl) {
             showStatus('fmg-discuss-status', 'error', '请先在API页面配置API');
             return;
         }
@@ -4346,7 +4382,8 @@ ${designBrief}
             body: {
                 model: settings.model,
                 messages,
-                temperature: 0.8,
+                temperature: normalizeTemperature(settings.temperature),
+                ...(settings.maxTokens ? { max_tokens: settings.maxTokens } : {}),
                 stream: true
             }
         };
@@ -4369,7 +4406,10 @@ ${designBrief}
 
         const body = {
             contents,
-            generationConfig: { temperature: 0.8 }
+            generationConfig: {
+                temperature: normalizeTemperature(settings.temperature),
+                ...(settings.maxTokens ? { maxOutputTokens: settings.maxTokens } : {})
+            }
         };
         if (systemParts.length > 0) {
             body.systemInstruction = { parts: [{ text: systemParts.join('\n\n') }] };
@@ -4483,7 +4523,7 @@ ${designBrief}
             return;
         }
 
-        if (!settings.apiUrl || !settings.apiKey) {
+        if (!settings.apiUrl) {
             showStatus('fmg-status', 'error', '请先在API页面配置API');
             return;
         }
@@ -4762,8 +4802,8 @@ ${userRequest}
         const apiUrl = document.getElementById('fmg-api-url').value.trim();
         const apiKey = document.getElementById('fmg-api-key').value.trim();
 
-        if (!apiUrl || !apiKey) {
-            showStatus('fmg-api-status', 'error', '请填写API URL和Key');
+        if (!apiUrl) {
+            showStatus('fmg-api-status', 'error', '请填写API URL');
             return;
         }
 
@@ -4783,19 +4823,15 @@ ${userRequest}
 
     async function testOpenAI(baseUrl, apiKey) {
         const url = baseUrl.replace(/\/$/, '') + '/models';
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            }
-        });
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+        const response = await fetch(url, { method: 'GET', headers });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     }
 
     async function testGemini(baseUrl, apiKey) {
-        const url = baseUrl.replace(/\/$/, '') + '/models?key=' + apiKey;
+        const url = baseUrl.replace(/\/$/, '') + '/models' + (apiKey ? `?key=${encodeURIComponent(apiKey)}` : '');
         const response = await fetch(url, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
@@ -4811,8 +4847,8 @@ ${userRequest}
         const apiUrl = document.getElementById('fmg-api-url').value.trim();
         const apiKey = document.getElementById('fmg-api-key').value.trim();
 
-        if (!apiUrl || !apiKey) {
-            showStatus('fmg-api-status', 'error', '请填写API URL和Key');
+        if (!apiUrl) {
+            showStatus('fmg-api-status', 'error', '请填写API URL');
             return;
         }
 
@@ -4848,12 +4884,14 @@ ${userRequest}
         const apiUrl = document.getElementById('fmg-api-url').value.trim();
         const apiKey = document.getElementById('fmg-api-key').value.trim();
         const model = document.getElementById('fmg-model').value;
+        const temperature = normalizeTemperature(document.getElementById('fmg-api-temperature').value);
+        const maxTokens = normalizeMaxTokens(document.getElementById('fmg-api-max-tokens').value);
         const modelSelect = document.getElementById('fmg-model');
         const models = Array.from(modelSelect.options).map(o => o.value).filter(Boolean);
         let name = document.getElementById('fmg-api-profile-name').value.trim();
 
-        if (!apiUrl || !apiKey) {
-            showStatus('fmg-api-status', 'error', '请填写API URL和Key');
+        if (!apiUrl) {
+            showStatus('fmg-api-status', 'error', '请填写API URL');
             return;
         }
         if (!name) name = buildProfileName(apiType, apiUrl, model) || '未命名配置';
@@ -4867,7 +4905,7 @@ ${userRequest}
             profile = { id: generateProfileId() };
             profiles.push(profile);
         }
-        Object.assign(profile, { name, apiType, apiUrl, apiKey, model, models });
+        Object.assign(profile, { name, apiType, apiUrl, apiKey, model, models, temperature, maxTokens });
 
         applyApiProfile(profile);
         saveSettings();
