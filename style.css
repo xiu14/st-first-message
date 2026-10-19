@@ -439,8 +439,7 @@
    ======================================== */
 
 #fmg-preview-modal,
-#fmg-history-detail-modal,
-#fmg-chat-session-modal {
+#fmg-history-detail-modal {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -738,17 +737,8 @@
     background: rgba(100, 200, 255, 0.25) !important;
 }
 
-/* 讨论页不再显示“勾选 AI 回复直接转世界书”的入口，保留底层逻辑以降低改动风险。 */
-#fmg-discuss-worldbook-toggle,
-#fmg-discuss-worldbook-apply,
-#fmg-discuss-worldbook-cancel,
-#fmg-discuss-worldbook-toolbar {
-    display: none !important;
-}
-
 /* 选择弹窗 */
 #fmg-selection-modal,
-#fmg-discuss-history-modal,
 #fmg-chat-session-modal {
     position: fixed !important;
     top: 0 !important;
@@ -1033,17 +1023,6 @@
     max-height: 600px;
 }
 
-.fmg-worldbook-container {
-    display: flex;
-    flex-direction: column;
-    height: calc(85vh - 140px);
-    max-height: 600px;
-}
-
-.fmg-worldbook-focus-hidden {
-    display: contents;
-}
-
 .fmg-discuss-focus-hidden {
     display: block;
 }
@@ -1053,36 +1032,7 @@
     display: none;
 }
 
-.fmg-discuss-worldbook-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    align-items: center;
-    padding: 8px 10px;
-    margin-bottom: 8px;
-    border-radius: 10px;
-    background: rgba(100, 255, 218, 0.06);
-    border: 1px solid rgba(100, 255, 218, 0.14);
-}
-
-.fmg-discuss-worldbook-toolbar-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.fmg-discuss-worldbook-toolbar-label {
-    font-size: 11px;
-    color: #8fd8cd;
-    white-space: nowrap;
-}
-
-.fmg-discuss-worldbook-toolbar .fmg-worldbook-select,
-.fmg-discuss-worldbook-toolbar .fmg-worldbook-input {
-    min-width: 96px;
-}
-
-.fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-worldbook-toggle):not(#fmg-discuss-worldbook-apply):not(#fmg-discuss-worldbook-cancel):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
+.fmg-discuss-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-discuss-focus-toggle):not(#fmg-discuss-token-total):not(#fmg-discuss-undo):not(#fmg-discuss-clear) {
     display: none;
 }
 
@@ -1103,64 +1053,12 @@
 }
 
 .fmg-discuss-container.chat-focused #fmg-discuss-focus-toggle,
-.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-toggle,
-.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-apply,
-.fmg-discuss-container.chat-focused #fmg-discuss-worldbook-cancel,
 .fmg-discuss-container.chat-focused #fmg-discuss-undo,
 .fmg-discuss-container.chat-focused #fmg-discuss-clear,
 .fmg-discuss-container.chat-focused #fmg-discuss-token-total {
     padding: 2px 6px;
     font-size: 10px;
     line-height: 1.1;
-}
-
-.fmg-worldbook-container.chat-focused .fmg-worldbook-focus-hidden,
-.fmg-worldbook-container.chat-focused #fmg-wb-status {
-    display: none;
-}
-
-.fmg-worldbook-container.chat-focused .fmg-chat-header .fmg-btn-group > :not(#fmg-wb-focus-toggle):not(#fmg-wb-token-total):not(#fmg-wb-undo):not(#fmg-wb-clear) {
-    display: none;
-}
-
-.fmg-worldbook-container.chat-focused .fmg-chat-header {
-    gap: 6px;
-    padding: 4px 8px;
-    margin-bottom: 6px;
-    border-radius: 6px;
-}
-
-.fmg-worldbook-container.chat-focused .fmg-chat-char-info {
-    max-width: 120px;
-    padding: 1px 6px;
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fmg-worldbook-container.chat-focused #fmg-wb-focus-toggle {
-    padding: 2px 6px;
-    font-size: 10px;
-    line-height: 1.1;
-}
-
-.fmg-worldbook-container.chat-focused #fmg-wb-undo,
-.fmg-worldbook-container.chat-focused #fmg-wb-clear {
-    padding: 2px 6px;
-    font-size: 10px;
-    line-height: 1.1;
-}
-
-.fmg-worldbook-container.chat-focused #fmg-wb-token-total {
-    padding: 2px 6px;
-    font-size: 10px;
-}
-
-.fmg-worldbook-hint {
-    margin-top: 8px;
-    font-size: 11px;
-    color: #888;
 }
 
 .fmg-chat-header {
@@ -1260,30 +1158,6 @@
 
 .fmg-chat-bubble.user .fmg-chat-label {
     text-align: right;
-}
-
-.fmg-chat-assistant-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 4px 6px;
-}
-
-.fmg-chat-assistant-pick {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    color: var(--SmartThemeBodyColor, #ddd);
-    background: rgba(100, 255, 218, 0.12);
-    border: 1px solid rgba(100, 255, 218, 0.22);
-    cursor: pointer;
-    user-select: none;
-}
-
-.fmg-chat-assistant-pick input {
-    margin: 0;
 }
 
 .fmg-chat-text {
@@ -1477,11 +1351,6 @@
         max-height: none;
     }
 
-    .fmg-worldbook-container {
-        height: calc(100vh - 180px);
-        max-height: none;
-    }
-
     .fmg-chat-input {
         font-size: 16px;
     }
@@ -1508,7 +1377,7 @@
     }
 }
 
-/* 手机端聊天专注模式：只压缩讨论/世界书页的顶部，不影响普通模式的信息区。 */
+/* 手机端聊天专注模式：只压缩讨论页的顶部，不影响普通模式的信息区。 */
 @media (max-width: 768px) {
     #fmg-popup.fmg-mobile-chat-focus-active {
         top: 0 !important;
@@ -1562,15 +1431,13 @@
         overflow: hidden;
     }
 
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container,
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-worldbook-container {
+    #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container {
         height: calc(100vh - 122px);
         max-height: none;
     }
 
     @supports (height: 100dvh) {
-        #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container,
-        #fmg-popup.fmg-mobile-chat-focus-active .fmg-worldbook-container {
+        #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container {
             height: calc(100dvh - 122px);
         }
     }
@@ -1612,8 +1479,7 @@
         display: none;
     }
 
-    #fmg-popup.fmg-mobile-chat-focus-active #fmg-discuss-focus-toggle,
-    #fmg-popup.fmg-mobile-chat-focus-active #fmg-wb-focus-toggle {
+    #fmg-popup.fmg-mobile-chat-focus-active #fmg-discuss-focus-toggle {
         position: sticky;
         left: 0;
         z-index: 2;

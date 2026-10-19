@@ -32,9 +32,8 @@
         selectedPresetPrompts: [],
         // 开场白历史记录（最多5条）
         firstMessageHistory: [],
-        // 讨论/世界书最近会话（每个角色每类最多3条）
+        // 讨论最近会话（每个角色最多3条，所有角色合计最多30条）
         discussSessionHistory: [],
-        worldbookSessionHistory: [],
         // 状态栏设计方向
         statusBarStyle: 'director'
     };
@@ -141,20 +140,29 @@
             if (context && context.extensionSettings && context.extensionSettings[EXTENSION_NAME]) {
                 settings = { ...DEFAULT_SETTINGS, ...context.extensionSettings[EXTENSION_NAME] };
                 console.log('[开场白生成器] 从 extensionSettings 加载设置');
-                migrateApiProfiles();
+                normalizeLoadedSettings();
+                // 旧版本会在 localStorage 另存一份完整设置（含 API Key），已迁移后不再需要
+                localStorage.removeItem(SETTINGS_KEY);
                 return;
             }
 
+            // 仅用于从旧版本迁移：读一次 localStorage，之后只存 extensionSettings
             const saved = localStorage.getItem(SETTINGS_KEY);
             if (saved) {
                 settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-                console.log('[开场白生成器] 从 localStorage 加载设置');
-                migrateApiProfiles();
+                console.log('[开场白生成器] 从 localStorage 迁移设置');
+                normalizeLoadedSettings();
                 saveSettings();
             }
         } catch (e) {
             console.error('[开场白生成器] 加载设置失败:', e);
         }
+    }
+
+    function normalizeLoadedSettings() {
+        migrateApiProfiles();
+        // 独立的世界书页已移除，它的会话记录不再使用
+        delete settings.worldbookSessionHistory;
     }
 
     // ========================================
@@ -226,9 +234,7 @@
                 if (typeof context.saveSettingsDebounced === 'function') {
                     context.saveSettingsDebounced();
                 }
-                console.log('[开场白生成器] 设置已保存');
             }
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
         } catch (e) {
             console.error('[开场白生成器] 保存设置失败:', e);
         }
@@ -380,9 +386,6 @@
                             <span class="fmg-chat-char-info" id="fmg-discuss-char-name">未选择角色</span>
                             <div class="fmg-btn-group">
                                 <button class="fmg-btn-small" id="fmg-discuss-focus-toggle" title="切换聊天专注模式">↕ 专注聊天</button>
-                                <button class="fmg-btn-small" id="fmg-discuss-worldbook-toggle" title="勾选 AI 回复并直接转成世界书条目">📚 转世界书</button>
-                                <button class="fmg-btn-small" id="fmg-discuss-worldbook-apply" title="将勾选的 AI 回复直接添加到世界书" style="display:none;" disabled>✅ 添加所选</button>
-                                <button class="fmg-btn-small" id="fmg-discuss-worldbook-cancel" title="退出世界书勾选模式" style="display:none;">✖ 取消</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-refresh" title="刷新角色数据">🔄 刷新</button>
                                 <button class="fmg-btn-small" id="fmg-discuss-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-discuss-clear" title="清空对话">🗑️ 清空</button>
@@ -390,34 +393,6 @@
                             </div>
                         </div>
 
-                        <div class="fmg-discuss-worldbook-toolbar" id="fmg-discuss-worldbook-toolbar" style="display:none;">
-                            <div class="fmg-discuss-worldbook-toolbar-row">
-                                <span class="fmg-discuss-worldbook-toolbar-label">状态</span>
-                                <div class="fmg-worldbook-state-group">
-                                    <label class="fmg-worldbook-state-chip blue">
-                                        <input id="fmg-discuss-worldbook-constant" type="checkbox" checked>
-                                        <span>蓝灯</span>
-                                    </label>
-                                    <label class="fmg-worldbook-state-chip green">
-                                        <input id="fmg-discuss-worldbook-normal" type="checkbox">
-                                        <span>绿灯</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="fmg-discuss-worldbook-toolbar-row">
-                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-position">位置</label>
-                                <select class="fmg-worldbook-select" id="fmg-discuss-worldbook-position"></select>
-                            </div>
-                            <div class="fmg-discuss-worldbook-toolbar-row">
-                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-depth">深度</label>
-                                <input class="fmg-worldbook-input" id="fmg-discuss-worldbook-depth" type="number" step="1" value="4">
-                            </div>
-                            <div class="fmg-discuss-worldbook-toolbar-row">
-                                <label class="fmg-discuss-worldbook-toolbar-label" for="fmg-discuss-worldbook-order">顺序</label>
-                                <input class="fmg-worldbook-input" id="fmg-discuss-worldbook-order" type="number" step="1" value="100">
-                            </div>
-                        </div>
-                        
                         <!-- 角色卡完整内容折叠预览 -->
                         <div class="fmg-discuss-info-panel fmg-discuss-focus-hidden" id="fmg-discuss-info-panel">
                             <div class="fmg-collapse-section">
@@ -462,71 +437,6 @@
                     </div>
                 </div>
 
-                <!-- 世界书页 -->
-                <div class="fmg-tab-content" data-tab="worldbook">
-                    <div class="fmg-worldbook-container">
-                        <div class="fmg-chat-header">
-                            <span class="fmg-chat-char-info" id="fmg-wb-char-name">未选择角色</span>
-                            <div class="fmg-btn-group">
-                                <button class="fmg-btn-small" id="fmg-wb-focus-toggle" title="切换聊天专注模式">↕ 专注聊天</button>
-                                <button class="fmg-btn-small" id="fmg-wb-refresh" title="刷新角色数据">🔄 刷新</button>
-                                <button class="fmg-btn-small" id="fmg-wb-undo" title="撤回上一轮并恢复到输入框" disabled>↩ 撤回上一轮</button>
-                                <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-wb-clear" title="清空对话">🗑️ 清空</button>
-                                <span class="fmg-token-badge" id="fmg-wb-token-total" title="估算当前世界书会话发送内容的总 token">总Token --</span>
-                            </div>
-                        </div>
-
-                        <div class="fmg-worldbook-focus-hidden">
-                        <div class="fmg-section">
-                            <div class="fmg-section-header">
-                                <h4>👤 角色参考信息</h4>
-                                <span class="fmg-char-name" id="fmg-wb-char-badge">未选择角色</span>
-                            </div>
-                            <div class="fmg-checkbox-group">
-                                <label><input type="checkbox" id="fmg-wb-inc-desc" checked> 描述</label>
-                                <label><input type="checkbox" id="fmg-wb-inc-pers" checked> 性格</label>
-                                <label><input type="checkbox" id="fmg-wb-inc-scen" checked> 场景</label>
-                                <label><input type="checkbox" id="fmg-wb-inc-first" checked> 当前开场白</label>
-                            </div>
-                            <div class="fmg-data-preview" id="fmg-wb-data-preview">
-                                <div style="color: #888; font-size: 11px;">点击刷新加载数据预览</div>
-                            </div>
-                            <div class="fmg-worldbook-hint">已勾选字段会作为世界书设计上下文自动注入。</div>
-                        </div>
-
-                        <div class="fmg-section fmg-section-compact">
-                            <div class="fmg-section-header">
-                                <h4>📚 世界书条目</h4>
-                                <div class="fmg-btn-group">
-                                    <span class="fmg-count" id="fmg-wb-wi-count">0/0</span>
-                                    <button class="fmg-btn-small fmg-btn-open" id="fmg-wb-wi-open">选择条目</button>
-                                </div>
-                            </div>
-                            <div class="fmg-chat-session-bar">
-                                <span>🕘 最近会话</span>
-                                <div class="fmg-btn-group">
-                                    <span class="fmg-count" id="fmg-wb-session-count">0/3</span>
-                                    <button class="fmg-btn-small fmg-btn-open" id="fmg-wb-session-open">打开</button>
-                                </div>
-                            </div>
-                        </div>
-                        </div>
-
-                        <div class="fmg-chat-messages" id="fmg-wb-chat-messages">
-                            <div class="fmg-chat-welcome">
-                                <div class="fmg-chat-welcome-icon">📚</div>
-                                <div>选择角色后，可以在这里讨论并生成可直接写入世界书的条目</div>
-                                <div style="font-size:11px;color:#888;margin-top:4px;">当你要求“输出世界书条目”时，AI 会给出可一键添加的卡片</div>
-                            </div>
-                        </div>
-                        <div class="fmg-chat-input-area">
-                            <textarea id="fmg-wb-input" class="fmg-chat-input" placeholder="输入你想补充到世界书的设定，或要求 AI 直接产出可添加条目..." rows="2"></textarea>
-                            <button class="fmg-btn fmg-btn-primary fmg-chat-send" id="fmg-wb-send">发送</button>
-                        </div>
-                        <div id="fmg-wb-status" class="fmg-status" style="display: none;"></div>
-                    </div>
-                </div>
-                
                 <!-- 状态栏页 -->
                 <div class="fmg-tab-content" data-tab="statusbar">
                     <div class="fmg-sb-container">
@@ -781,11 +691,7 @@
             ['fmg-inc-desc', settings.includeDescription],
             ['fmg-inc-pers', settings.includePersonality],
             ['fmg-inc-scen', settings.includeScenario],
-            ['fmg-inc-first', settings.includeCurrentFirstMes],
-            ['fmg-wb-inc-desc', settings.includeDescription],
-            ['fmg-wb-inc-pers', settings.includePersonality],
-            ['fmg-wb-inc-scen', settings.includeScenario],
-            ['fmg-wb-inc-first', settings.includeCurrentFirstMes]
+            ['fmg-inc-first', settings.includeCurrentFirstMes]
         ];
 
         controlMap.forEach(([id, checked]) => {
@@ -798,6 +704,280 @@
     // 事件绑定
     // ========================================
 
+    // 只处理插件自己界面内的事件，避免 ST 页面上任何操作都触发保存或 token 统计
+    const FMG_EVENT_SCOPE = '#fmg-popup, #fmg-overlay, #fmg-chat-session-modal';
+
+    function markCardIgnored(card) {
+        if (!card) return;
+        card.classList.add('ignored');
+        const actionsEl = card.querySelector('.fmg-edit-card-actions');
+        if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
+    }
+
+    function toggleCollapse(header, body) {
+        if (!body) return;
+        const isOpen = body.classList.toggle('open');
+        const arrow = header.querySelector('.fmg-collapse-arrow');
+        if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+    }
+
+    function isTouchDevice() {
+        return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    }
+
+    // 按元素 id 分发的点击操作
+    const CLICK_ACTIONS = {
+        'fmg-overlay': () => closePopup(),
+        'fmg-refresh': () => loadCharacterData(),
+        'fmg-generate': () => generateFirstMessage(),
+        'fmg-test': () => testConnection(),
+        'fmg-get-models': () => getModels(),
+        'fmg-save-api': () => saveApiSettings(),
+        'fmg-api-profile-new': () => newApiProfile(),
+        'fmg-api-profile-delete': () => deleteApiProfile(),
+        'fmg-wi-open': () => openSelectionModal('worldinfo'),
+        'fmg-preset-open': () => openSelectionModal('preset'),
+        'fmg-history-clear': () => clearAllHistory(),
+        // 发送按钮在生成中充当停止按钮
+        'fmg-discuss-send': () => (isDiscussGenerating ? stopDiscussGeneration() : sendDiscussMessage()),
+        'fmg-discuss-undo': () => undoLastDiscussRound(),
+        'fmg-discuss-clear': () => clearDiscussion(),
+        'fmg-discuss-refresh': () => loadCharacterData(),
+        'fmg-discuss-focus-toggle': () => setDiscussFocusMode(!discussFocusMode),
+        'fmg-discuss-wi-open': () => openSelectionModal('worldinfo'),
+        'fmg-discuss-session-open': () => openChatSessionModal(),
+        'fmg-sb-generate': () => generateStatusBar(),
+        'fmg-sb-regenerate': () => generateStatusBar(),
+        'fmg-sb-clear': () => clearStatusBar(),
+        'fmg-sb-refresh': () => loadCharacterData(),
+        'fmg-sb-apply-wi': () => applyStatusBarWorldEntry(),
+        'fmg-sb-apply-regex': () => applyStatusBarRegex(),
+        'fmg-chat-session-close': () => closeChatSessionModal(),
+        'fmg-chat-session-new': () => {
+            if (startNewChatSession()) closeChatSessionModal();
+        },
+        'fmg-chat-session-load': () => {
+            const checked = document.querySelector('#fmg-chat-session-modal input[name="fmg-chat-session-choice"]:checked');
+            if (!checked) return;
+            loadChatSession(checked.value);
+            closeChatSessionModal();
+        }
+    };
+
+    // 按选择器分发的点击操作（按顺序匹配第一个）
+    const DELEGATED_CLICK_ACTIONS = [
+        ['.fmg-tab', (el) => switchTab(el.dataset.tab)],
+        ['#fmg-popup .fmg-close-btn', () => closePopup()],
+        ['#fmg-chat-session-modal .fmg-select-overlay', () => closeChatSessionModal()],
+        ['.fmg-chat-session-delete', (el) => {
+            deleteChatSession(el.dataset.sessionId);
+            renderChatSessionModalBody();
+        }],
+        ['.fmg-edit-apply', (el) => {
+            const editData = window._fmgPendingEdits?.[el.dataset.editKey];
+            if (!editData) return;
+            el.disabled = true;
+            el.textContent = '⏳ 应用中...';
+            applyCharacterEdit(editData.field, editData.content, el);
+        }],
+        ['.fmg-chat-apply-all', (el) => applyAllDiscussCards(el)],
+        ['.fmg-worldbook-apply', (el) => {
+            const entryData = window._fmgPendingWorldbookEntries?.[el.dataset.entryKey];
+            if (!entryData) return;
+            el.disabled = true;
+            el.textContent = '⏳ 添加中...';
+            applyWorldbookEntry(entryData, el);
+        }],
+        ['.fmg-first-message-plan-apply', (el) => {
+            const planData = window._fmgPendingFirstMessagePlans?.[el.dataset.planKey];
+            if (!planData) return;
+            el.disabled = true;
+            el.textContent = '⏳ 跳转中...';
+            applyFirstMessagePlan(planData, el);
+        }],
+        ['.fmg-edit-ignore, .fmg-worldbook-ignore, .fmg-first-message-plan-ignore', (el) => {
+            markCardIgnored(el.closest('.fmg-edit-card, .fmg-worldbook-card, .fmg-first-message-plan-card'));
+        }],
+        ['.fmg-edit-card-old .fmg-edit-card-label', (el) => toggleCollapse(el, el.nextElementSibling)],
+        ['.fmg-collapse-header, .fmg-sb-preview-header', (el) => toggleCollapse(el, document.getElementById(el.dataset.target))],
+        ['.fmg-history-card', (el) => {
+            const index = parseInt(el.dataset.historyIndex, 10);
+            if (!isNaN(index)) showHistoryDetail(index);
+        }]
+    ];
+
+    const CHARACTER_INCLUDE_SETTINGS = {
+        'fmg-inc-desc': 'includeDescription',
+        'fmg-inc-pers': 'includePersonality',
+        'fmg-inc-scen': 'includeScenario',
+        'fmg-inc-first': 'includeCurrentFirstMes'
+    };
+
+    function handleClick(e) {
+        if (!e.target.closest(FMG_EVENT_SCOPE)) return;
+
+        const idTarget = e.target.closest('[id]');
+        const idAction = idTarget && CLICK_ACTIONS[idTarget.id];
+        if (idAction) {
+            if (!idTarget.disabled) idAction(idTarget);
+            return;
+        }
+
+        for (const [selector, action] of DELEGATED_CLICK_ACTIONS) {
+            const el = e.target.closest(selector);
+            if (el) {
+                if (!el.disabled) action(el);
+                return;
+            }
+        }
+    }
+
+    function handleChange(e) {
+        const target = e.target;
+        if (!target.closest(FMG_EVENT_SCOPE)) return;
+
+        if (CHARACTER_INCLUDE_SETTINGS[target.id]) {
+            settings[CHARACTER_INCLUDE_SETTINGS[target.id]] = target.checked;
+            saveSettings();
+            return;
+        }
+
+        switch (target.id) {
+            case 'fmg-api-profile':
+                switchApiProfile(target.value);
+                return;
+            case 'fmg-inc-preset':
+                settings.includePresetPrompts = target.checked;
+                saveSettings();
+                return;
+            case 'fmg-sb-style':
+                settings.statusBarStyle = target.value || 'director';
+                saveSettings();
+                return;
+        }
+
+        if (target.classList.contains('fmg-worldbook-position-select')) {
+            handleWorldbookCardPositionChange(target);
+        } else if (target.classList.contains('fmg-worldbook-state-input')) {
+            handleWorldbookCardStateChange(target);
+        }
+    }
+
+    function handleInput(e) {
+        const target = e.target;
+        if (!target.closest(FMG_EVENT_SCOPE)) return;
+
+        if (target.id === 'fmg-discuss-input') {
+            requestDiscussTokenCountUpdate(120);
+        } else if (target.classList.contains('fmg-worldbook-order-input')) {
+            handleWorldbookCardOrderInput(target);
+        }
+    }
+
+    function handleKeydown(e) {
+        if (e.key === 'Escape') {
+            handleEscape();
+            return;
+        }
+
+        // 输入法组字时的回车用于上屏，不发送；触屏设备上回车换行，用按钮发送
+        if (e.target.id === 'fmg-discuss-input' && e.key === 'Enter' && !e.shiftKey
+            && !e.isComposing && e.keyCode !== 229 && !isTouchDevice()) {
+            e.preventDefault();
+            if (!isDiscussGenerating) sendDiscussMessage();
+        }
+    }
+
+    // ESC 优先关闭顶层弹窗，最后关闭主弹窗
+    function handleEscape() {
+        const historyModal = document.getElementById('fmg-history-detail-modal');
+        if (historyModal) {
+            historyModal.remove();
+            return;
+        }
+
+        if (document.getElementById('fmg-chat-session-modal')) {
+            closeChatSessionModal();
+            return;
+        }
+
+        const selectModal = document.getElementById('fmg-selection-modal');
+        if (selectModal) {
+            selectModal.remove();
+            return;
+        }
+
+        if (document.getElementById('fmg-preview-modal')) {
+            stopGeneration();
+            closePreview();
+            return;
+        }
+
+        if (document.getElementById('fmg-popup')?.classList.contains('show')) {
+            closePopup();
+        }
+    }
+
+    function handleWorldbookCardPositionChange(positionSelect) {
+        const entryData = window._fmgPendingWorldbookEntries?.[positionSelect.dataset.entryKey];
+        if (!entryData) return;
+
+        const nextPosition = normalizeWorldbookPosition(positionSelect.value);
+        entryData.position = nextPosition;
+
+        if (nextPosition === WORLDBOOK_POSITIONS.atDepth) {
+            entryData.depth = Number.isFinite(Number(entryData.depth)) ? Number(entryData.depth) : 4;
+            const selectedOption = positionSelect.options[positionSelect.selectedIndex];
+            const selectedRole = normalizeWorldbookRole(selectedOption?.dataset?.role);
+            entryData.role = Number.isFinite(Number(selectedRole))
+                ? Number(selectedRole)
+                : WORLDBOOK_DEPTH_ROLES.system;
+        } else if (nextPosition !== WORLDBOOK_POSITIONS.outlet) {
+            entryData.role = null;
+        }
+
+        const valueEl = positionSelect.closest('.fmg-worldbook-card')?.querySelector('.fmg-worldbook-position-value');
+        if (valueEl) {
+            valueEl.textContent = getWorldbookPositionLabel(nextPosition, entryData.role, entryData.outlet_name);
+        }
+    }
+
+    function handleWorldbookCardStateChange(stateInput) {
+        const entryData = window._fmgPendingWorldbookEntries?.[stateInput.dataset.entryKey];
+        if (!entryData) return;
+
+        entryData.constant = stateInput.dataset.state === 'constant';
+        entryData.vectorized = false;
+        entryData.selective = entryData.constant ? false : entryData.selective !== false;
+
+        const card = stateInput.closest('.fmg-worldbook-card');
+        if (card) {
+            card.querySelectorAll('.fmg-worldbook-state-input').forEach(input => {
+                input.checked = input === stateInput;
+            });
+
+            const triggerEl = card.querySelector('.fmg-worldbook-trigger-value');
+            if (triggerEl) {
+                triggerEl.textContent = entryData.constant ? '常驻条目' : '关键词触发';
+            }
+        }
+    }
+
+    function handleWorldbookCardOrderInput(orderInput) {
+        const entryData = window._fmgPendingWorldbookEntries?.[orderInput.dataset.entryKey];
+        if (!entryData) return;
+
+        const isBlank = orderInput.value.trim() === '';
+        const nextOrder = !isBlank && Number.isFinite(Number(orderInput.value)) ? Number(orderInput.value) : 100;
+        const keepOriginal = isBlank && entryData.keep_placement;
+        entryData.insertion_order = keepOriginal ? null : nextOrder;
+
+        const valueEl = orderInput.closest('.fmg-worldbook-card')?.querySelector('.fmg-worldbook-order-value');
+        if (valueEl) {
+            valueEl.textContent = keepOriginal ? '保持原设置' : String(nextOrder);
+        }
+    }
+
     function bindEvents() {
         const discussContainer = document.getElementById('fmg-chat-messages');
         if (discussContainer) {
@@ -806,558 +986,10 @@
             });
         }
 
-        const worldbookContainer = document.getElementById('fmg-wb-chat-messages');
-        if (worldbookContainer) {
-            worldbookContainer.addEventListener('scroll', () => {
-                worldbookAutoScroll = isDiscussNearBottom(worldbookContainer);
-            });
-        }
-
-        // 关闭和遮罩 - 只关闭主弹窗（排除预览弹窗的关闭按钮）
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('fmg-close-btn') && e.target.closest('#fmg-popup')) closePopup();
-            if (e.target.id === 'fmg-overlay') closePopup();
-        });
-
-        // 标签页
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('fmg-tab')) {
-                switchTab(e.target.dataset.tab);
-            }
-        });
-
-        // 刷新
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-refresh') loadCharacterData();
-        });
-
-        // 生成
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-generate') generateFirstMessage();
-        });
-
-        // API相关
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-test') testConnection();
-            if (e.target.id === 'fmg-get-models') getModels();
-            if (e.target.id === 'fmg-save-api') saveApiSettings();
-            if (e.target.id === 'fmg-api-profile-new') newApiProfile();
-            if (e.target.id === 'fmg-api-profile-delete') deleteApiProfile();
-        });
-
-        // API 配置方案切换
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'fmg-api-profile') switchApiProfile(e.target.value);
-        });
-
-        // 世界书选择弹窗
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wi-open') openSelectionModal('worldinfo');
-        });
-
-        // 预设条目选择弹窗
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-preset-open') openSelectionModal('preset');
-        });
-
-        // 预设总开关变化
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'fmg-inc-preset') {
-                settings.includePresetPrompts = e.target.checked;
-                saveSettings();
-            }
-            if (e.target.id === 'fmg-sb-style') {
-                settings.statusBarStyle = e.target.value || 'director';
-                saveSettings();
-            }
-        });
-
-        // ESC关闭 - 优先关闭顶层弹窗，最后关闭主弹窗
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                const historyModal = document.getElementById('fmg-history-detail-modal');
-                if (historyModal) {
-                    historyModal.remove();
-                    return;
-                }
-
-                const sessionModal = document.getElementById('fmg-chat-session-modal');
-                if (sessionModal) {
-                    sessionModal.remove();
-                    return;
-                }
-
-                const selectModal = document.getElementById('fmg-selection-modal');
-                if (selectModal) {
-                    selectModal.remove();
-                    return;
-                }
-
-                const previewModal = document.getElementById('fmg-preview-modal');
-                if (previewModal) {
-                    stopGeneration();
-                    closePreview();
-                    return;
-                }
-                
-                closePopup();
-            }
-        });
-
-        // 复选框变化保存
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'fmg-inc-desc' || e.target.id === 'fmg-wb-inc-desc') settings.includeDescription = e.target.checked;
-            if (e.target.id === 'fmg-inc-pers' || e.target.id === 'fmg-wb-inc-pers') settings.includePersonality = e.target.checked;
-            if (e.target.id === 'fmg-inc-scen' || e.target.id === 'fmg-wb-inc-scen') settings.includeScenario = e.target.checked;
-            if (e.target.id === 'fmg-inc-first' || e.target.id === 'fmg-wb-inc-first') settings.includeCurrentFirstMes = e.target.checked;
-            syncCharacterIncludeControls();
-            saveSettings();
-            requestDiscussTokenCountUpdate();
-            requestWorldbookTokenCountUpdate();
-        });
-
-        // 讨论页 - 发送
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-send') sendDiscussMessage();
-        });
-
-        // 讨论页 - 撤回上一轮
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-undo') undoLastDiscussRound();
-        });
-
-        // 讨论页 - 清空
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-clear') clearDiscussion();
-        });
-
-        // 讨论页 - 刷新
-        document.addEventListener('click', async (e) => {
-            if (e.target.id === 'fmg-discuss-refresh') {
-                await loadCharacterData();
-                updateDiscussPanel();
-            }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-focus-toggle') {
-                setDiscussFocusMode(!discussFocusMode);
-            }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-worldbook-toggle') {
-                setDiscussWorldbookSelectionMode(true);
-                showStatus('fmg-discuss-status', 'success', '已进入世界书勾选模式，请勾选 AI 回复并设置位置、深度、顺序和蓝绿灯');
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-cancel') {
-                setDiscussWorldbookSelectionMode(false);
-                showStatus('fmg-discuss-status', 'success', '已退出世界书勾选模式');
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-apply') {
-                generateWorldbookFromDiscussSelection();
-            }
-        });
-
-        document.addEventListener('change', (e) => {
-            if (!e.target.classList.contains('fmg-discuss-worldbook-check')) return;
-            const messageId = e.target.dataset.messageId;
-            if (!messageId) return;
-
-            if (e.target.checked) {
-                selectedDiscussWorldbookMessageIds.add(messageId);
-            } else {
-                selectedDiscussWorldbookMessageIds.delete(messageId);
-            }
-            updateDiscussWorldbookSelectionUI();
-        });
-
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'fmg-discuss-worldbook-constant') {
-                discussWorldbookDraftConfig.constant = e.target.checked ? true : false;
-                updateDiscussWorldbookToolbarControls();
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-normal') {
-                discussWorldbookDraftConfig.constant = e.target.checked ? false : true;
-                updateDiscussWorldbookToolbarControls();
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-position') {
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                discussWorldbookDraftConfig.position = Number(e.target.value);
-                discussWorldbookDraftConfig.role = selectedOption?.dataset?.role !== undefined
-                    ? Number(selectedOption.dataset.role)
-                    : WORLDBOOK_DEPTH_ROLES.system;
-                updateDiscussWorldbookToolbarControls();
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-depth') {
-                discussWorldbookDraftConfig.depth = Number.isFinite(Number(e.target.value))
-                    ? Number(e.target.value)
-                    : 4;
-            }
-            if (e.target.id === 'fmg-discuss-worldbook-order') {
-                discussWorldbookDraftConfig.order = Number.isFinite(Number(e.target.value))
-                    ? Number(e.target.value)
-                    : 100;
-            }
-        });
-
-        // 讨论页 - 世界书选择
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-wi-open') openSelectionModal('worldinfo');
-        });
-
-        // 讨论页 - 最近会话
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-discuss-session-open') openChatSessionModal('discuss');
-        });
-
-        // 世界书页 - 发送
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-send') sendWorldbookMessage();
-        });
-
-        // 世界书页 - 撤回上一轮
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-undo') undoLastWorldbookRound();
-        });
-
-        // 世界书页 - 清空
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-clear') clearWorldbookDiscussion();
-        });
-
-        // 世界书页 - 刷新
-        document.addEventListener('click', async (e) => {
-            if (e.target.id === 'fmg-wb-refresh') {
-                await loadCharacterData();
-                updateWorldbookPanel();
-            }
-        });
-
-        // 世界书页 - 聊天专注模式
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-focus-toggle') {
-                setWorldbookFocusMode(!worldbookFocusMode);
-            }
-        });
-
-        // 世界书页 - 世界书选择
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-wi-open') openSelectionModal('worldinfo');
-        });
-
-        // 世界书页 - 最近会话
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-wb-session-open') openChatSessionModal('worldbook');
-        });
-
-        document.addEventListener('click', (e) => {
-            const modal = document.getElementById('fmg-chat-session-modal');
-            if (!modal) return;
-
-            if (e.target.id === 'fmg-chat-session-close' || e.target.classList.contains('fmg-select-overlay')) {
-                modal.remove();
-                return;
-            }
-
-            const deleteBtn = e.target.closest('.fmg-chat-session-delete');
-            if (deleteBtn) {
-                deleteChatSession(deleteBtn.dataset.sessionType, deleteBtn.dataset.sessionId);
-                renderChatSessionModalBody(deleteBtn.dataset.sessionType);
-                return;
-            }
-
-            if (e.target.id === 'fmg-chat-session-new') {
-                if (startNewChatSession(modal.dataset.sessionType)) modal.remove();
-                return;
-            }
-
-            if (e.target.id === 'fmg-chat-session-load') {
-                const checked = modal.querySelector('input[name="fmg-chat-session-choice"]:checked');
-                if (!checked) return;
-                loadChatSession(modal.dataset.sessionType, checked.value);
-                modal.remove();
-            }
-        });
-
-        // 讨论页 - 折叠切换
-        document.addEventListener('click', (e) => {
-            const header = e.target.closest('.fmg-collapse-header');
-            if (header) {
-                const targetId = header.dataset.target;
-                const body = document.getElementById(targetId);
-                const arrow = header.querySelector('.fmg-collapse-arrow');
-                if (body) {
-                    const isOpen = body.classList.toggle('open');
-                    if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
-                }
-            }
-        });
-
-        // 讨论页 - Enter发送 / Shift+Enter换行
-        document.addEventListener('keydown', (e) => {
-            if (e.target.id === 'fmg-discuss-input' && e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendDiscussMessage();
-            }
-        });
-
-        // 世界书页 - Enter发送 / Shift+Enter换行
-        document.addEventListener('keydown', (e) => {
-            if (e.target.id === 'fmg-wb-input' && e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendWorldbookMessage();
-            }
-        });
-
-        document.addEventListener('input', (e) => {
-            if (e.target.id === 'fmg-discuss-input') {
-                requestDiscussTokenCountUpdate(120);
-            }
-            if (e.target.id === 'fmg-wb-input') {
-                requestWorldbookTokenCountUpdate(120);
-            }
-        });
-
-        // 编辑卡片 - 应用修改
-        document.addEventListener('click', (e) => {
-            const applyBtn = e.target.closest('.fmg-edit-apply');
-            if (applyBtn) {
-                const key = applyBtn.dataset.editKey;
-                const editData = window._fmgPendingEdits?.[key];
-                if (editData) {
-                    applyBtn.disabled = true;
-                    applyBtn.textContent = '⏳ 应用中...';
-                    applyCharacterEdit(editData.field, editData.content, applyBtn);
-                }
-            }
-        });
-
-        // 讨论回复 - 全部应用（修改 + 世界书条目）
-        document.addEventListener('click', (e) => {
-            const applyAllBtn = e.target.closest('.fmg-chat-apply-all');
-            if (applyAllBtn && !applyAllBtn.disabled) {
-                applyAllDiscussCards(applyAllBtn);
-            }
-        });
-
-        // 编辑卡片 - 忽略
-        document.addEventListener('click', (e) => {
-            const ignoreBtn = e.target.closest('.fmg-edit-ignore');
-            if (ignoreBtn) {
-                const card = ignoreBtn.closest('.fmg-edit-card');
-                if (card) {
-                    card.classList.add('ignored');
-                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
-                }
-            }
-        });
-
-        // 开场白规划卡片 - 确认并调用生成页
-        document.addEventListener('click', (e) => {
-            const applyBtn = e.target.closest('.fmg-first-message-plan-apply');
-            if (applyBtn) {
-                const key = applyBtn.dataset.planKey;
-                const planData = window._fmgPendingFirstMessagePlans?.[key];
-                if (planData) {
-                    applyBtn.disabled = true;
-                    applyBtn.textContent = '⏳ 跳转中...';
-                    applyFirstMessagePlan(planData, applyBtn);
-                }
-            }
-        });
-
-        // 开场白规划卡片 - 忽略
-        document.addEventListener('click', (e) => {
-            const ignoreBtn = e.target.closest('.fmg-first-message-plan-ignore');
-            if (ignoreBtn) {
-                const card = ignoreBtn.closest('.fmg-first-message-plan-card');
-                if (card) {
-                    card.classList.add('ignored');
-                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
-                }
-            }
-        });
-
-        // 世界书卡片 - 应用
-        document.addEventListener('click', (e) => {
-            const applyBtn = e.target.closest('.fmg-worldbook-apply');
-            if (applyBtn) {
-                const key = applyBtn.dataset.entryKey;
-                const entryData = window._fmgPendingWorldbookEntries?.[key];
-                if (entryData) {
-                    applyBtn.disabled = true;
-                    applyBtn.textContent = '⏳ 添加中...';
-                    applyWorldbookEntry(entryData, applyBtn);
-                }
-            }
-        });
-
-        // 世界书卡片 - 忽略
-        document.addEventListener('click', (e) => {
-            const ignoreBtn = e.target.closest('.fmg-worldbook-ignore');
-            if (ignoreBtn) {
-                const card = ignoreBtn.closest('.fmg-worldbook-card');
-                if (card) {
-                    card.classList.add('ignored');
-                    const actionsEl = card.querySelector('.fmg-edit-card-actions');
-                    if (actionsEl) actionsEl.innerHTML = '<span class="fmg-edit-ignored-badge">❌ 已忽略</span>';
-                }
-            }
-        });
-
-        // 世界书卡片 - 手动调整位置
-        document.addEventListener('change', (e) => {
-            const positionSelect = e.target.closest('.fmg-worldbook-position-select');
-            if (!positionSelect) return;
-
-            const key = positionSelect.dataset.entryKey;
-            const entryData = window._fmgPendingWorldbookEntries?.[key];
-            if (!entryData) return;
-
-            const nextPosition = normalizeWorldbookPosition(positionSelect.value);
-            entryData.position = nextPosition;
-
-            if (nextPosition === WORLDBOOK_POSITIONS.atDepth) {
-                entryData.depth = Number.isFinite(Number(entryData.depth)) ? Number(entryData.depth) : 4;
-                const selectedOption = positionSelect.options[positionSelect.selectedIndex];
-                const selectedRole = normalizeWorldbookRole(selectedOption?.dataset?.role);
-                entryData.role = Number.isFinite(Number(selectedRole))
-                    ? Number(selectedRole)
-                    : WORLDBOOK_DEPTH_ROLES.system;
-            } else if (nextPosition !== WORLDBOOK_POSITIONS.outlet) {
-                entryData.role = null;
-            }
-
-            const card = positionSelect.closest('.fmg-worldbook-card');
-            const valueEl = card?.querySelector('.fmg-worldbook-position-value');
-            if (valueEl) {
-                valueEl.textContent = getWorldbookPositionLabel(nextPosition, entryData.role, entryData.outlet_name);
-            }
-        });
-
-        // 世界书卡片 - 蓝灯/绿灯状态
-        document.addEventListener('change', (e) => {
-            const stateInput = e.target.closest('.fmg-worldbook-state-input');
-            if (!stateInput) return;
-
-            const key = stateInput.dataset.entryKey;
-            const entryData = window._fmgPendingWorldbookEntries?.[key];
-            if (!entryData) return;
-
-            const nextState = stateInput.dataset.state;
-            const card = stateInput.closest('.fmg-worldbook-card');
-            if (nextState === 'constant') {
-                entryData.constant = true;
-                entryData.vectorized = false;
-                entryData.selective = false;
-            } else {
-                entryData.constant = false;
-                entryData.vectorized = false;
-                entryData.selective = entryData.selective !== false ? true : entryData.selective;
-            }
-
-            if (card) {
-                card.querySelectorAll('.fmg-worldbook-state-input').forEach(input => {
-                    input.checked = input === stateInput;
-                });
-
-                const triggerEl = card.querySelector('.fmg-worldbook-trigger-value');
-                if (triggerEl) {
-                    triggerEl.textContent = entryData.constant ? '常驻条目' : '关键词触发';
-                }
-            }
-        });
-
-        // 世界书卡片 - 手动调整顺序
-        document.addEventListener('input', (e) => {
-            const orderInput = e.target.closest('.fmg-worldbook-order-input');
-            if (!orderInput) return;
-
-            const key = orderInput.dataset.entryKey;
-            const entryData = window._fmgPendingWorldbookEntries?.[key];
-            if (!entryData) return;
-
-            const isBlank = orderInput.value.trim() === '';
-            const nextOrder = !isBlank && Number.isFinite(Number(orderInput.value)) ? Number(orderInput.value) : 100;
-            const keepOriginal = isBlank && entryData.keep_placement;
-            entryData.insertion_order = keepOriginal ? null : nextOrder;
-
-            const card = orderInput.closest('.fmg-worldbook-card');
-            const valueEl = card?.querySelector('.fmg-worldbook-order-value');
-            if (valueEl) {
-                valueEl.textContent = keepOriginal ? '保持原设置' : String(nextOrder);
-            }
-        });
-
-        // 编辑卡片 - 旧值折叠切换
-        document.addEventListener('click', (e) => {
-            const label = e.target.closest('.fmg-edit-card-old .fmg-edit-card-label');
-            if (label) {
-                const contentEl = label.nextElementSibling;
-                const arrow = label.querySelector('.fmg-collapse-arrow');
-                if (contentEl) {
-                    const isOpen = contentEl.classList.toggle('open');
-                    if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
-                }
-            }
-        });
-
-        // 状态栏页 - 生成/重新生成
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-sb-generate' || e.target.id === 'fmg-sb-regenerate') generateStatusBar();
-        });
-
-        // 状态栏页 - 刷新
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-sb-clear') clearStatusBar();
-            if (e.target.id === 'fmg-sb-refresh') {
-                loadCharacterData();
-                updateSbCharName();
-            }
-        });
-
-        // 状态栏页 - 应用世界书
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-sb-apply-wi') applyStatusBarWorldEntry();
-        });
-
-        // 状态栏页 - 应用正则
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-sb-apply-regex') applyStatusBarRegex();
-        });
-
-        // 状态栏页 - 预览区折叠
-        document.addEventListener('click', (e) => {
-            const header = e.target.closest('.fmg-sb-preview-header');
-            if (header) {
-                const targetId = header.dataset.target;
-                const body = document.getElementById(targetId);
-                const arrow = header.querySelector('.fmg-collapse-arrow');
-                if (body) {
-                    const isOpen = body.classList.toggle('open');
-                    if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
-                }
-            }
-        });
-
-        // 历史记录卡片点击
-        document.addEventListener('click', (e) => {
-            const card = e.target.closest('.fmg-history-card');
-            if (card) {
-                const index = parseInt(card.dataset.historyIndex);
-                if (!isNaN(index)) {
-                    showHistoryDetail(index);
-                }
-            }
-        });
-
-        // 历史记录清除按钮
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'fmg-history-clear') clearAllHistory();
-        });
+        document.addEventListener('click', handleClick);
+        document.addEventListener('change', handleChange);
+        document.addEventListener('input', handleInput);
+        document.addEventListener('keydown', handleKeydown);
     }
 
     // ========================================
@@ -1412,8 +1044,7 @@
         const activeTab = activeTabName
             || document.querySelector('.fmg-tab.active')?.dataset?.tab
             || '';
-        const isFocusedChatTab = (activeTab === 'discuss' && discussFocusMode)
-            || (activeTab === 'worldbook' && worldbookFocusMode);
+        const isFocusedChatTab = activeTab === 'discuss' && discussFocusMode;
 
         popup.classList.toggle('fmg-mobile-chat-focus-active', isFocusedChatTab);
     }
@@ -1432,8 +1063,6 @@
     async function loadCharacterData() {
         try {
             const context = SillyTavern.getContext();
-            console.log('[开场白生成器] context:', context);
-            console.log('[开场白生成器] characterId:', context.characterId);
 
             // 显示角色名
             const charNameEl = document.getElementById('fmg-char-name');
@@ -1441,9 +1070,6 @@
 
             if (context.characterId !== undefined && context.characters[context.characterId]) {
                 const char = context.characters[context.characterId];
-                console.log('[开场白生成器] 角色数据:', char);
-                console.log('[开场白生成器] char.data:', char.data);
-                console.log('[开场白生成器] character_book:', char.data?.character_book);
 
                 charNameEl.textContent = char.name || '未命名角色';
                 charNameEl.classList.add('active');
@@ -1454,15 +1080,12 @@
                 const first = char.first_mes || char.data?.first_mes;
 
                 dataPreviewEl.innerHTML = buildCharacterDataPreviewHtml({ desc, pers, scen, first });
-                const wbPreviewEl = document.getElementById('fmg-wb-data-preview');
-                if (wbPreviewEl) {
-                    wbPreviewEl.innerHTML = buildCharacterDataPreviewHtml({ desc, pers, scen, first });
-                }
 
                 // 缓存角色数据（包含全部字段）
                 const d = char.data || {};
                 window._fmgCharData = {
                     name: char.name,
+                    avatar: char.avatar || '',
                     desc, pers, scen, first,
                     mes_example: d.mes_example || char.mes_example || '',
                     system_prompt: d.system_prompt || '',
@@ -1480,16 +1103,12 @@
                     spec_version: d.spec_version || '',
                     _raw: d
                 };
-                resetChatSessionsForCharacter(window._fmgCharData.name);
+                resetChatSessionsForCharacter(getCharacterKey(window._fmgCharData));
 
             } else {
                 charNameEl.textContent = '未选择角色';
                 charNameEl.classList.remove('active');
                 dataPreviewEl.innerHTML = '<span style="color: #ff6464; font-size: 11px;">请先选择一个角色</span>';
-                const wbPreviewEl = document.getElementById('fmg-wb-data-preview');
-                if (wbPreviewEl) {
-                    wbPreviewEl.innerHTML = '<span style="color: #ff6464; font-size: 11px;">请先选择一个角色</span>';
-                }
                 window._fmgCharData = null;
                 resetChatSessionsForCharacter(null);
             }
@@ -1503,14 +1122,9 @@
             // 更新讨论页面板
             updateDiscussPanel();
 
-            // 更新世界书页面板
-            updateWorldbookPanel();
-
-        
             // 更新状态栏数据并触发角色切换清理检测
             updateSbCharName();
-
-} catch (e) {
+        } catch (e) {
             console.error('[开场白生成器] 加载数据失败:', e);
             showStatus('fmg-status', 'error', '加载数据失败: ' + e.message);
         }
@@ -1562,61 +1176,6 @@
         }
     }
 
-    function buildOriginalWorldInfoEntry(entry, uid, displayIndex = 0) {
-        const numericPosition = Number(entry.position ?? 0);
-        const stringPosition = numericPosition === 1 ? 'after_char' : 'before_char';
-
-        return {
-            id: uid,
-            keys: Array.isArray(entry.keys) ? entry.keys : [],
-            secondary_keys: Array.isArray(entry.secondary_keys) ? entry.secondary_keys : [],
-            comment: entry.comment || '',
-            content: entry.content || '',
-            constant: entry.constant === true,
-            selective: entry.constant === true ? false : entry.selective !== false,
-            insertion_order: entry.insertion_order ?? 100,
-            enabled: entry.enabled !== false,
-            position: stringPosition,
-            use_regex: true,
-            extensions: {
-                position: numericPosition,
-                exclude_recursion: false,
-                display_index: displayIndex,
-                probability: 100,
-                useProbability: true,
-                depth: entry.depth ?? (numericPosition === 4 ? 0 : 4),
-                selectiveLogic: 0,
-                group: '',
-                group_override: false,
-                group_weight: 100,
-                prevent_recursion: false,
-                delay_until_recursion: false,
-                scan_depth: null,
-                match_whole_words: false,
-                use_group_scoring: false,
-                case_sensitive: null,
-                automation_id: '',
-                role: 0,
-                vectorized: false,
-                sticky: 0,
-                cooldown: 0,
-                delay: 0
-            }
-        };
-    }
-
-    function appendOriginalWorldInfoEntry(worldData, entry, uid) {
-        if (!worldData.originalData || typeof worldData.originalData !== 'object') {
-            worldData.originalData = { entries: [] };
-        }
-        if (!Array.isArray(worldData.originalData.entries)) {
-            worldData.originalData.entries = [];
-        }
-
-        const displayIndex = worldData.originalData.entries.length;
-        worldData.originalData.entries.push(buildOriginalWorldInfoEntry(entry, uid, displayIndex));
-    }
-
     async function loadWorldInfoList(context, forceRefresh = true) {
         window._fmgWorldEntries = [];
         currentWorldInfoSelectionScope = 'global';
@@ -1631,14 +1190,12 @@
 
                 if (worldName) {
                     currentWorldInfoSelectionScope = `world:${worldName}`;
-                    console.log('[开场白生成器] 发现外部关联世界书:', worldName);
 
                     try {
                         const headers = typeof context.getRequestHeaders === 'function'
                             ? context.getRequestHeaders()
                             : { 'Content-Type': 'application/json' };
 
-                        console.log('[开场白生成器] 从API强制刷新世界书数据...');
                         const response = await fetch('/api/worldinfo/get', {
                             method: 'POST',
                             headers: headers,
@@ -1647,7 +1204,6 @@
 
                         if (response.ok) {
                             const worldData = await response.json();
-                            console.log('[开场白生成器] 从API获取世界书数据成功');
                             entries = extractEntriesFromWorldData(worldData);
 
                             if (forceRefresh && typeof window.worldInfoCache !== 'undefined') {
@@ -1673,11 +1229,9 @@
                 if (entries.length === 0) {
                     currentWorldInfoSelectionScope = `character:${char?.avatar || char?.name || context.characterId}`;
                     entries = getCharacterBookEntries(context);
-                    console.log('[开场白生成器] 内嵌世界书条目数:', entries.length);
                 }
             }
 
-            console.log('[开场白生成器] 最终获取到世界书条目数:', entries.length);
 
             window._fmgWorldEntries = entries;
 
@@ -1715,22 +1269,18 @@
 
         if (context.characters && context.characterId !== undefined) {
             const char = context.characters[context.characterId];
-            console.log('[开场白生成器] 检查角色:', char?.name);
 
             // 尝试多种访问路径
             let book = null;
 
             if (char?.data?.character_book) {
                 book = char.data.character_book;
-                console.log('[开场白生成器] 找到 char.data.character_book');
             } else if (char?.character_book) {
                 book = char.character_book;
-                console.log('[开场白生成器] 找到 char.character_book');
             }
 
             if (book && book.entries) {
                 const bookEntries = Array.isArray(book.entries) ? book.entries : Object.values(book.entries);
-                console.log('[开场白生成器] 内嵌条目数量:', bookEntries.length);
 
                 for (const entry of bookEntries) {
                     if (entry.content) {
@@ -1757,12 +1307,10 @@
         const entries = [];
 
         if (!worldData || !worldData.entries) {
-            console.log('[开场白生成器] 世界书数据无效');
             return entries;
         }
 
         const rawEntries = Array.isArray(worldData.entries) ? worldData.entries : Object.values(worldData.entries);
-        console.log('[开场白生成器] 外部世界书条目数:', rawEntries.length);
 
         for (const entry of rawEntries) {
             if (entry.content) {
@@ -1866,12 +1414,6 @@
         return identifiers.some(identifier => selectedIdentifiers.includes(identifier));
     }
 
-    function selectAllWorldInfo(select) {
-        document.querySelectorAll('.fmg-wi-cb').forEach(cb => {
-            cb.checked = select;
-        });
-    }
-
     function getSelectedWorldInfo() {
         const entries = window._fmgWorldEntries || [];
         const savedSelections = getSavedWorldInfoSelections();
@@ -1944,9 +1486,6 @@
 
         // 同步讨论页世界书计数
         updateDiscussWiCount();
-
-        // 同步世界书页世界书计数
-        updateWorldbookWiCount();
     }
 
     function openSelectionModal(type) {
@@ -2069,10 +1608,8 @@
             modal.remove();
             if (isWorldInfo) {
                 requestDiscussTokenCountUpdate();
-                requestWorldbookTokenCountUpdate();
             }
 
-            console.log(`[开场白生成器] 已保存${isWorldInfo ? '世界书' : '预设'}选择:`, selectedIdentifiers);
         };
     }
 
@@ -2087,7 +1624,6 @@
         try {
             // 获取 Chat Completion 设置
             const chatSettings = context.chatCompletionSettings;
-            console.log('[开场白生成器] chatCompletionSettings:', chatSettings);
 
             if (!chatSettings || !chatSettings.prompts) {
                 updateCounts();
@@ -2096,7 +1632,6 @@
 
             // 获取 prompts 数组
             const prompts = chatSettings.prompts || [];
-            console.log('[开场白生成器] prompts:', prompts);
 
             // 过滤出有内容的条目
             const validPrompts = prompts.filter(p => p && (p.content || p.prompt));
@@ -2129,27 +1664,6 @@
         }
     }
 
-    function savePresetSelections() {
-        const selectedIdentifiers = [];
-        document.querySelectorAll('.fmg-preset-cb:checked').forEach(cb => {
-            const identifier = cb.dataset.identifier;
-            if (identifier) {
-                selectedIdentifiers.push(identifier);
-            }
-        });
-        settings.selectedPresetPrompts = selectedIdentifiers;
-        saveSettings();
-        console.log('[开场白生成器] 已保存预设勾选状态:', selectedIdentifiers);
-    }
-
-    function selectAllPresets(select) {
-        document.querySelectorAll('.fmg-preset-cb').forEach(cb => {
-            cb.checked = select;
-        });
-        // 保存勾选状态
-        savePresetSelections();
-    }
-
     function getSelectedPresets() {
         const prompts = window._fmgPresetPrompts || [];
         const savedSelections = settings.selectedPresetPrompts || [];
@@ -2165,41 +1679,13 @@
         return selected;
     }
 
-    function getSelectedCharacterInfoBlocks() {
-        const charData = window._fmgCharData;
-        if (!charData) return [];
-
-        const blocks = [];
-        if (settings.includeDescription && charData.desc) {
-            blocks.push({ label: '描述', key: 'description', value: charData.desc });
-        }
-        if (settings.includePersonality && charData.pers) {
-            blocks.push({ label: '性格', key: 'personality', value: charData.pers });
-        }
-        if (settings.includeScenario && charData.scen) {
-            blocks.push({ label: '场景', key: 'scenario', value: charData.scen });
-        }
-        if (settings.includeCurrentFirstMes && charData.first) {
-            blocks.push({ label: '当前开场白', key: 'first_mes', value: charData.first });
-        }
-
-        return blocks;
-    }
-
-    function getSelectedCharacterInfoText() {
-        const blocks = getSelectedCharacterInfoBlocks();
-        if (blocks.length === 0) {
-            return '（未勾选任何角色字段，或这些字段为空）';
-        }
-        return blocks.map(block => `【${block.label} ${block.key}】\n${block.value}`).join('\n\n');
-    }
-
     // ========================================
     // 角色卡讨论 - 多轮对话
     // ========================================
 
     // 讨论对话历史
     const CHAT_SESSION_HISTORY_LIMIT = 3;
+    const CHAT_SESSION_TOTAL_LIMIT = 30;
     let discussMessages = [];
     let chatMessageIdCounter = 0;
     let discussFocusMode = false;
@@ -2208,26 +1694,8 @@
     let discussAbortController = null;
     let isDiscussGenerating = false;
     let discussAutoScroll = true;
-    let discussWorldbookSelectionMode = false;
-    let isDiscussWorldbookApplying = false;
-    const selectedDiscussWorldbookMessageIds = new Set();
-    const discussWorldbookDraftConfig = {
-        constant: true,
-        position: WORLDBOOK_POSITIONS.before,
-        role: WORLDBOOK_DEPTH_ROLES.system,
-        depth: 4,
-        order: 100
-    };
-    let worldbookMessages = [];
-    let worldbookFocusMode = false;
-    let worldbookTokenUpdateTimer = null;
-    let worldbookTokenUpdateVersion = 0;
-    let worldbookAbortController = null;
-    let isWorldbookGenerating = false;
-    let worldbookAutoScroll = true;
     let currentDiscussSessionId = null;
-    let currentWorldbookSessionId = null;
-    let currentChatSessionCharacterName = null;
+    let currentChatSessionCharacterKey = null;
 
     function isDiscussNearBottom(container) {
         if (!container) return true;
@@ -2252,56 +1720,20 @@
         });
     }
 
-    function resetChatSessionsForCharacter(charName) {
-        const normalizedName = charName || null;
-        if (currentChatSessionCharacterName === normalizedName) return;
-
-        currentChatSessionCharacterName = normalizedName;
-        currentDiscussSessionId = null;
-        currentWorldbookSessionId = null;
-        discussMessages = [];
-        worldbookMessages = [];
-        selectedDiscussWorldbookMessageIds.clear();
-        discussWorldbookSelectionMode = false;
-        renderDiscussionHistory();
-        renderWorldbookHistory();
-        renderChatSessionControls();
+    // 用头像文件名区分角色（同名角色不会串会话），取不到时退回角色名
+    function getCharacterKey(charData = window._fmgCharData) {
+        return charData ? (charData.avatar || charData.name || null) : null;
     }
 
-    function getChatSessionConfig(type) {
-        return type === 'worldbook'
-            ? {
-                key: 'worldbookSessionHistory',
-                messages: () => worldbookMessages,
-                setMessages: (messages) => { worldbookMessages = messages; },
-                getCurrentId: () => currentWorldbookSessionId,
-                setCurrentId: (id) => { currentWorldbookSessionId = id; },
-                countId: 'fmg-wb-session-count',
-                statusId: 'fmg-wb-status',
-                title: '世界书最近会话',
-                emptyText: '暂无世界书会话',
-                loadBlocked: () => isWorldbookGenerating,
-                render: renderWorldbookHistory,
-                updatePanel: updateWorldbookPanel,
-                requestToken: requestWorldbookTokenCountUpdate,
-                syncSystem: syncWorldbookSystemPrompt
-            }
-            : {
-                key: 'discussSessionHistory',
-                messages: () => discussMessages,
-                setMessages: (messages) => { discussMessages = messages; },
-                getCurrentId: () => currentDiscussSessionId,
-                setCurrentId: (id) => { currentDiscussSessionId = id; },
-                countId: 'fmg-discuss-session-count',
-                statusId: 'fmg-discuss-status',
-                title: '讨论最近会话',
-                emptyText: '暂无讨论会话',
-                loadBlocked: () => isDiscussGenerating || isDiscussWorldbookApplying,
-                render: renderDiscussionHistory,
-                updatePanel: updateDiscussPanel,
-                requestToken: requestDiscussTokenCountUpdate,
-                syncSystem: syncDiscussSystemPrompt
-            };
+    function resetChatSessionsForCharacter(charKey) {
+        const normalizedKey = charKey || null;
+        if (currentChatSessionCharacterKey === normalizedKey) return;
+
+        currentChatSessionCharacterKey = normalizedKey;
+        currentDiscussSessionId = null;
+        discussMessages = [];
+        renderDiscussionHistory();
+        renderChatSessionControls();
     }
 
     function getVisibleChatSessionMessages(messages) {
@@ -2314,25 +1746,27 @@
             }));
     }
 
-    function getChatSessionHistory(type) {
-        const config = getChatSessionConfig(type);
-        if (!Array.isArray(settings[config.key])) {
-            settings[config.key] = [];
+    function getChatSessionHistory() {
+        if (!Array.isArray(settings.discussSessionHistory)) {
+            settings.discussSessionHistory = [];
         }
-        return settings[config.key];
+        return settings.discussSessionHistory;
     }
 
-    function getCurrentChatSessionRecords(type) {
-        const charName = window._fmgCharData?.name;
-        if (!charName) return [];
+    // 旧记录只有 charName，按名字匹配；保存时会补上 charKey
+    function isSessionOfCharacter(record, charData = window._fmgCharData) {
+        if (!record || !charData) return false;
+        return record.charKey ? record.charKey === getCharacterKey(charData) : record.charName === charData.name;
+    }
 
-        return getChatSessionHistory(type)
-            .filter(record => record && record.charName === charName)
+    function getCurrentChatSessionRecords() {
+        return getChatSessionHistory()
+            .filter(record => isSessionOfCharacter(record))
             .slice(0, CHAT_SESSION_HISTORY_LIMIT);
     }
 
-    function createChatSessionId(type) {
-        return `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    function createChatSessionId() {
+        return `discuss_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
     function getChatSessionPreview(messages, role) {
@@ -2346,32 +1780,31 @@
         return value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value;
     }
 
-    function saveChatSession(type) {
-        const config = getChatSessionConfig(type);
-        const charName = window._fmgCharData?.name;
-        if (!charName) return;
+    function saveChatSession() {
+        const charData = window._fmgCharData;
+        if (!charData) return;
 
-        const messages = getVisibleChatSessionMessages(config.messages());
+        const messages = getVisibleChatSessionMessages(discussMessages);
         const hasUser = messages.some(message => message.role === 'user');
         const hasAssistant = messages.some(message => message.role === 'assistant');
-        const currentId = config.getCurrentId();
 
         if (!hasUser || !hasAssistant) {
-            if (currentId && messages.length === 0) {
-                deleteChatSession(type, currentId, true);
-                config.setCurrentId(null);
+            if (currentDiscussSessionId && messages.length === 0) {
+                deleteChatSession(currentDiscussSessionId, true);
+                currentDiscussSessionId = null;
             }
             renderChatSessionControls();
             return;
         }
 
-        const id = currentId || createChatSessionId(type);
+        const id = currentDiscussSessionId || createChatSessionId();
         const firstUserText = getChatSessionPreview(messages, 'user');
         const lastAssistantText = getChatSessionPreview(messages, 'assistant');
         const now = new Date();
         const record = {
             id,
-            charName,
+            charKey: getCharacterKey(charData),
+            charName: charData.name,
             title: clipText(firstUserText, 32) || '未命名会话',
             preview: clipText(lastAssistantText, 72) || clipText(firstUserText, 72),
             messageCount: messages.length,
@@ -2380,49 +1813,48 @@
             messages
         };
 
-        const history = getChatSessionHistory(type);
-        const otherCharacters = history.filter(item => item.charName !== charName);
-        const sameCharacter = history.filter(item => item.charName === charName && item.id !== id);
+        const history = getChatSessionHistory();
+        const otherCharacters = history.filter(item => !isSessionOfCharacter(item, charData));
+        const sameCharacter = history.filter(item => isSessionOfCharacter(item, charData) && item.id !== id);
+        const keptSame = [record, ...sameCharacter].slice(0, CHAT_SESSION_HISTORY_LIMIT);
+        // 其他角色的会话按更新时间保留最近的，避免 settings 无限增长
+        const keptOthers = otherCharacters
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+            .slice(0, Math.max(0, CHAT_SESSION_TOTAL_LIMIT - keptSame.length));
 
-        settings[config.key] = [record, ...sameCharacter]
-            .slice(0, CHAT_SESSION_HISTORY_LIMIT)
-            .concat(otherCharacters);
-        config.setCurrentId(id);
+        settings.discussSessionHistory = keptSame.concat(keptOthers);
+        currentDiscussSessionId = id;
         saveSettings();
         renderChatSessionControls();
     }
 
     function renderChatSessionControls() {
-        ['discuss', 'worldbook'].forEach(type => {
-            const config = getChatSessionConfig(type);
-            const countEl = document.getElementById(config.countId);
-            if (countEl) {
-                countEl.textContent = `${getCurrentChatSessionRecords(type).length}/${CHAT_SESSION_HISTORY_LIMIT}`;
-            }
-        });
+        const countEl = document.getElementById('fmg-discuss-session-count');
+        if (countEl) {
+            countEl.textContent = `${getCurrentChatSessionRecords().length}/${CHAT_SESSION_HISTORY_LIMIT}`;
+        }
     }
 
-    function renderChatSessionModalBody(type) {
+    function renderChatSessionModalBody() {
         const modal = document.getElementById('fmg-chat-session-modal');
         if (!modal) return;
 
         const body = modal.querySelector('#fmg-chat-session-body');
         const loadBtn = modal.querySelector('#fmg-chat-session-load');
-        const sessions = getCurrentChatSessionRecords(type);
-        const currentId = getChatSessionConfig(type).getCurrentId();
+        const sessions = getCurrentChatSessionRecords();
 
         if (!body) return;
 
         if (sessions.length === 0) {
-            body.innerHTML = `<div class="fmg-discuss-history-empty">${escapeHtml(getChatSessionConfig(type).emptyText)}</div>`;
+            body.innerHTML = '<div class="fmg-discuss-history-empty">暂无讨论会话</div>';
             if (loadBtn) loadBtn.disabled = true;
             renderChatSessionControls();
             return;
         }
 
         body.innerHTML = sessions.map((record, index) => {
-            const checked = record.id === currentId || (!currentId && index === 0);
-            const activeClass = record.id === currentId ? ' active' : '';
+            const checked = record.id === currentDiscussSessionId || (!currentDiscussSessionId && index === 0);
+            const activeClass = record.id === currentDiscussSessionId ? ' active' : '';
             return `
                 <div class="fmg-discuss-session-card${activeClass}">
                     <div class="fmg-chat-session-choice-row">
@@ -2430,7 +1862,7 @@
                             <input type="radio" name="fmg-chat-session-choice" value="${escapeHtml(record.id)}" ${checked ? 'checked' : ''}>
                             <span class="fmg-discuss-session-title">${escapeHtml(record.title || '未命名会话')}</span>
                         </label>
-                        <button class="fmg-btn-small fmg-btn-danger-small fmg-chat-session-delete" data-session-type="${escapeHtml(type)}" data-session-id="${escapeHtml(record.id)}">删除</button>
+                        <button class="fmg-btn-small fmg-btn-danger-small fmg-chat-session-delete" data-session-id="${escapeHtml(record.id)}">删除</button>
                     </div>
                     <div class="fmg-discuss-session-header">
                         <span class="fmg-discuss-session-time">${escapeHtml(record.timestamp || '')}</span>
@@ -2445,19 +1877,16 @@
         renderChatSessionControls();
     }
 
-    function openChatSessionModal(type) {
-        const config = getChatSessionConfig(type);
-        const existing = document.getElementById('fmg-chat-session-modal');
-        if (existing) existing.remove();
+    function openChatSessionModal() {
+        closeChatSessionModal();
 
         const modal = document.createElement('div');
         modal.id = 'fmg-chat-session-modal';
-        modal.dataset.sessionType = type;
         modal.innerHTML = `
             <div class="fmg-select-overlay"></div>
             <div class="fmg-select-content fmg-chat-session-modal-content">
                 <div class="fmg-select-header">
-                    <h4>🕘 ${escapeHtml(config.title)}</h4>
+                    <h4>🕘 讨论最近会话</h4>
                     <button class="fmg-close-btn" id="fmg-chat-session-close">×</button>
                 </div>
                 <div class="fmg-select-body fmg-chat-session-modal-body" id="fmg-chat-session-body"></div>
@@ -2471,16 +1900,19 @@
             </div>
         `;
         document.body.appendChild(modal);
-        renderChatSessionModalBody(type);
+        renderChatSessionModalBody();
     }
 
-    function deleteChatSession(type, sessionId, silent = false) {
-        const config = getChatSessionConfig(type);
+    function closeChatSessionModal() {
+        document.getElementById('fmg-chat-session-modal')?.remove();
+    }
+
+    function deleteChatSession(sessionId, silent = false) {
         if (!sessionId) return;
 
-        settings[config.key] = getChatSessionHistory(type).filter(record => record.id !== sessionId);
-        if (config.getCurrentId() === sessionId) {
-            config.setCurrentId(null);
+        settings.discussSessionHistory = getChatSessionHistory().filter(record => record.id !== sessionId);
+        if (currentDiscussSessionId === sessionId) {
+            currentDiscussSessionId = null;
         }
 
         saveSettings();
@@ -2490,173 +1922,41 @@
         }
     }
 
-    function loadChatSession(type, sessionId) {
-        const config = getChatSessionConfig(type);
-        if (config.loadBlocked()) {
-            showStatus(config.statusId, 'error', '请先等待当前操作完成，再进入历史会话');
+    function isDiscussBusy() {
+        return isDiscussGenerating;
+    }
+
+    function loadChatSession(sessionId) {
+        if (isDiscussBusy()) {
+            showStatus('fmg-discuss-status', 'error', '请先等待当前操作完成，再进入历史会话');
             return;
         }
 
-        const record = getChatSessionHistory(type).find(item => item.id === sessionId);
+        const record = getChatSessionHistory().find(item => item.id === sessionId);
         if (!record) return;
 
-        const messages = (record.messages || [])
-            .filter(message => message && message.role !== 'system')
-            .map(message => ({
-                id: message.id || '',
-                role: message.role,
-                content: String(message.content || '')
-            }));
+        const messages = getVisibleChatSessionMessages(record.messages);
+        ensureChatMessageIds(messages);
 
-        if (type === 'discuss') {
-            selectedDiscussWorldbookMessageIds.clear();
-            discussWorldbookSelectionMode = false;
-            ensureChatMessageIds(messages);
-        }
-
-        config.setMessages(messages);
-        config.syncSystem();
-        config.setCurrentId(record.id);
-        config.render();
-        config.updatePanel();
-        config.requestToken();
-        showStatus(config.statusId, 'success', '已进入最近会话');
+        discussMessages = messages;
+        syncDiscussSystemPrompt();
+        currentDiscussSessionId = record.id;
+        renderDiscussionHistory();
+        updateDiscussPanel();
+        showStatus('fmg-discuss-status', 'success', '已进入最近会话');
     }
 
-    function startNewChatSession(type) {
-        const config = getChatSessionConfig(type);
-        if (config.loadBlocked()) {
-            showStatus(config.statusId, 'error', '请先等待当前操作完成，再新建会话');
+    function startNewChatSession() {
+        if (isDiscussBusy()) {
+            showStatus('fmg-discuss-status', 'error', '请先等待当前操作完成，再新建会话');
             return false;
         }
 
         // 清空只重置当前会话，已保存的记录仍保留在最近会话中
-        saveChatSession(type);
-        if (type === 'worldbook') {
-            clearWorldbookDiscussion();
-        } else {
-            clearDiscussion();
-        }
-        showStatus(config.statusId, 'success', '已新建会话，之前的会话仍可在「最近会话」中进入');
+        saveChatSession();
+        clearDiscussion();
+        showStatus('fmg-discuss-status', 'success', '已新建会话，之前的会话仍可在「最近会话」中进入');
         return true;
-    }
-
-    function pruneDiscussWorldbookSelection() {
-        const validIds = new Set(
-            discussMessages
-                .filter(msg => msg.role === 'assistant' && msg.id)
-                .map(msg => msg.id)
-        );
-
-        Array.from(selectedDiscussWorldbookMessageIds).forEach(messageId => {
-            if (!validIds.has(messageId)) {
-                selectedDiscussWorldbookMessageIds.delete(messageId);
-            }
-        });
-    }
-
-    function updateDiscussWorldbookSelectionUI() {
-        const toggleBtn = document.getElementById('fmg-discuss-worldbook-toggle');
-        const applyBtn = document.getElementById('fmg-discuss-worldbook-apply');
-        const cancelBtn = document.getElementById('fmg-discuss-worldbook-cancel');
-        const toolbar = document.getElementById('fmg-discuss-worldbook-toolbar');
-        const selectedCount = selectedDiscussWorldbookMessageIds.size;
-
-        if (toggleBtn) {
-            toggleBtn.textContent = discussWorldbookSelectionMode ? '📚 选取中' : '📚 转世界书';
-            toggleBtn.title = discussWorldbookSelectionMode
-                ? '正在勾选 AI 回复，确认参数后点击“添加所选”'
-                : '进入世界书勾选模式，从多条 AI 回复中挑选需要沉淀的设定';
-            toggleBtn.classList.toggle('active', discussWorldbookSelectionMode);
-            toggleBtn.disabled = isDiscussWorldbookApplying;
-        }
-
-        if (applyBtn) {
-            applyBtn.style.display = discussWorldbookSelectionMode ? '' : 'none';
-            applyBtn.disabled = isDiscussWorldbookApplying || selectedCount === 0 || isDiscussGenerating;
-            applyBtn.textContent = isDiscussWorldbookApplying
-                ? '⏳ 添加中...'
-                : selectedCount > 0
-                    ? `✅ 添加所选(${selectedCount})`
-                    : '✅ 添加所选';
-        }
-
-        if (cancelBtn) {
-            cancelBtn.style.display = discussWorldbookSelectionMode ? '' : 'none';
-            cancelBtn.disabled = isDiscussWorldbookApplying;
-        }
-
-        if (toolbar) {
-            toolbar.style.display = discussWorldbookSelectionMode ? '' : 'none';
-        }
-
-        updateDiscussWorldbookToolbarControls();
-    }
-
-    function updateDiscussWorldbookToolbarControls() {
-        const positionEl = document.getElementById('fmg-discuss-worldbook-position');
-        const depthEl = document.getElementById('fmg-discuss-worldbook-depth');
-        const orderEl = document.getElementById('fmg-discuss-worldbook-order');
-        const constantEl = document.getElementById('fmg-discuss-worldbook-constant');
-        const normalEl = document.getElementById('fmg-discuss-worldbook-normal');
-
-        if (positionEl) {
-            if (!positionEl.dataset.optionsBound) {
-                positionEl.innerHTML = renderWorldbookSelectOptions(
-                    getWorldbookPositionOptions(null),
-                    discussWorldbookDraftConfig.position,
-                    discussWorldbookDraftConfig.role
-                );
-                positionEl.dataset.optionsBound = 'true';
-            }
-
-            Array.from(positionEl.options).forEach(option => {
-                const optionRole = option.dataset.role !== undefined
-                    ? Number(option.dataset.role)
-                    : null;
-                option.selected = Number(option.value) === Number(discussWorldbookDraftConfig.position)
-                    && (Number(option.value) !== WORLDBOOK_POSITIONS.atDepth || Number(optionRole ?? WORLDBOOK_DEPTH_ROLES.system) === Number(discussWorldbookDraftConfig.role));
-            });
-            positionEl.disabled = isDiscussWorldbookApplying;
-        }
-
-        if (depthEl) {
-            depthEl.value = String(discussWorldbookDraftConfig.depth);
-            depthEl.disabled = isDiscussWorldbookApplying || Number(discussWorldbookDraftConfig.position) !== WORLDBOOK_POSITIONS.atDepth;
-        }
-
-        if (orderEl) {
-            orderEl.value = String(discussWorldbookDraftConfig.order);
-            orderEl.disabled = isDiscussWorldbookApplying;
-        }
-
-        if (constantEl) {
-            constantEl.checked = discussWorldbookDraftConfig.constant === true;
-            constantEl.disabled = isDiscussWorldbookApplying;
-        }
-
-        if (normalEl) {
-            normalEl.checked = discussWorldbookDraftConfig.constant !== true;
-            normalEl.disabled = isDiscussWorldbookApplying;
-        }
-    }
-
-    function setDiscussWorldbookSelectionMode(enabled) {
-        discussWorldbookSelectionMode = enabled === true;
-        if (!discussWorldbookSelectionMode) {
-            selectedDiscussWorldbookMessageIds.clear();
-        } else {
-            pruneDiscussWorldbookSelection();
-        }
-        renderDiscussionHistory();
-        updateDiscussWorldbookSelectionUI();
-    }
-
-    function getSelectedDiscussAssistantMessages() {
-        ensureChatMessageIds(discussMessages);
-        pruneDiscussWorldbookSelection();
-        return discussMessages
-            .filter(msg => msg.role === 'assistant' && selectedDiscussWorldbookMessageIds.has(msg.id));
     }
 
     function getDiscussWelcomeHtml() {
@@ -2674,14 +1974,13 @@
         if (!container) return;
 
         ensureChatMessageIds(discussMessages);
-        pruneDiscussWorldbookSelection();
         const visibleMessages = discussMessages.filter(msg => msg.role !== 'system');
 
         window._fmgPendingEdits = {};
-        clearPendingWorldbookEntries(DISCUSS_WORLDBOOK_KEY_PREFIX);
+        window._fmgPendingWorldbookEntries = {};
         window._fmgPendingFirstMessagePlans = {};
         _editIdCounter = 0;
-        _discussWorldbookEntryIdCounter = 0;
+        _worldbookEntryIdCounter = 0;
         _firstMessagePlanIdCounter = 0;
         container.innerHTML = '';
 
@@ -2689,7 +1988,6 @@
             container.innerHTML = getDiscussWelcomeHtml();
             discussAutoScroll = true;
             updateDiscussUndoButton();
-            updateDiscussWorldbookSelectionUI();
             requestDiscussTokenCountUpdate();
             return;
         }
@@ -2698,7 +1996,6 @@
         discussAutoScroll = true;
         container.scrollTop = container.scrollHeight;
         updateDiscussUndoButton();
-        updateDiscussWorldbookSelectionUI();
         requestDiscussTokenCountUpdate();
     }
 
@@ -2851,7 +2148,6 @@
         updateDiscussWiCount();
         renderChatSessionControls();
         setDiscussFocusMode(discussFocusMode);
-        updateDiscussWorldbookSelectionUI();
         requestDiscussTokenCountUpdate();
     }
 
@@ -3020,41 +2316,11 @@ ${editableEntriesText}
         }
 
         const textEl = bubble.querySelector('.fmg-chat-text');
-        const existingToolbar = bubble.querySelector('.fmg-chat-assistant-toolbar');
         if (isStreaming) {
             textEl.innerHTML = escapeHtml(content) + '<span class="fmg-cursor">▌</span>';
-            if (existingToolbar) existingToolbar.remove();
         } else {
             bubble.dataset.messageId = messageId || '';
-            if (role === 'assistant') {
-                textEl.innerHTML = renderAssistantContent(content);
-                if (discussWorldbookSelectionMode && messageId) {
-                    let toolbar = existingToolbar;
-                    if (!toolbar) {
-                        toolbar = document.createElement('div');
-                        toolbar.className = 'fmg-chat-assistant-toolbar';
-                        bubble.insertBefore(toolbar, textEl);
-                    }
-                    const checked = selectedDiscussWorldbookMessageIds.has(messageId);
-                    toolbar.innerHTML = `
-                        <label class="fmg-chat-assistant-pick">
-                            <input
-                                type="checkbox"
-                                class="fmg-discuss-worldbook-check"
-                                data-message-id="${escapeHtml(messageId)}"
-                                ${checked ? 'checked' : ''}
-                                ${isDiscussWorldbookApplying ? 'disabled' : ''}
-                            >
-                            <span>转世界书</span>
-                        </label>
-                    `;
-                } else if (existingToolbar) {
-                    existingToolbar.remove();
-                }
-            } else {
-                textEl.innerHTML = escapeHtml(content);
-                if (existingToolbar) existingToolbar.remove();
-            }
+            textEl.innerHTML = role === 'assistant' ? renderAssistantContent(content) : escapeHtml(content);
             bubble.classList.remove('streaming');
         }
 
@@ -3093,7 +2359,7 @@ ${editableEntriesText}
             discussMessages = [];
         }
 
-        saveChatSession('discuss');
+        saveChatSession();
         renderDiscussionHistory();
 
         const input = document.getElementById('fmg-discuss-input');
@@ -3406,7 +2672,7 @@ ${editableEntriesText}
                 html += renderFirstMessagePlanCard(plan, planKey);
             } else {
                 const entry = block.data;
-                const entryKey = DISCUSS_WORLDBOOK_KEY_PREFIX + (++_discussWorldbookEntryIdCounter);
+                const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
                 if (!entry.invalid) {
                     worldbookCount++;
                     window._fmgPendingWorldbookEntries[entryKey] = {
@@ -3527,7 +2793,6 @@ ${editableEntriesText}
         if (editApplied > 0) updateDiscussPanel();
         if (latestContext) await loadWorldInfoList(latestContext, true);
         requestDiscussTokenCountUpdate();
-        requestWorldbookTokenCountUpdate();
 
         const doneText = `已应用 ${editApplied} 项修改、${worldbookApplied} 个世界书条目`;
         if (failures.length > 0) {
@@ -3660,373 +2925,8 @@ ${editableEntriesText}
     // 世界书讨论与条目应用
     // ========================================
 
-    // 讨论页与世界书页共用待应用条目表，用前缀区分，避免一页重渲染时清掉另一页的条目
     window._fmgPendingWorldbookEntries = {};
-    const WORLDBOOK_TAB_KEY_PREFIX = 'worldbook_';
-    const DISCUSS_WORLDBOOK_KEY_PREFIX = 'discuss_worldbook_';
     let _worldbookEntryIdCounter = 0;
-    let _discussWorldbookEntryIdCounter = 0;
-
-    function clearPendingWorldbookEntries(prefix) {
-        Object.keys(window._fmgPendingWorldbookEntries).forEach(key => {
-            if (key.startsWith(prefix)) delete window._fmgPendingWorldbookEntries[key];
-        });
-    }
-
-    function getWorldbookWelcomeHtml() {
-        return `
-            <div class="fmg-chat-welcome">
-                <div class="fmg-chat-welcome-icon">📚</div>
-                <div>选择角色后，可以在这里讨论世界设定并产出可直接写入世界书的条目</div>
-                <div style="font-size:11px;color:#888;margin-top:4px;">要求 AI “输出世界书条目”时，它会返回可一键添加的条目卡片</div>
-            </div>
-        `;
-    }
-
-    function updateWorldbookPanel() {
-        const charData = window._fmgCharData;
-        const headerNameEl = document.getElementById('fmg-wb-char-name');
-        const badgeNameEl = document.getElementById('fmg-wb-char-badge');
-
-        [headerNameEl, badgeNameEl].forEach(el => {
-            if (!el) return;
-            if (charData && charData.name) {
-                el.textContent = el.id === 'fmg-wb-char-name' ? `🎭 ${charData.name}` : charData.name;
-                el.classList.add('active');
-            } else {
-                el.textContent = '未选择角色';
-                el.classList.remove('active');
-            }
-        });
-
-        updateWorldbookWiCount();
-        renderChatSessionControls();
-        updateWorldbookUndoButton();
-        setWorldbookFocusMode(worldbookFocusMode);
-        requestWorldbookTokenCountUpdate();
-    }
-
-    function updateWorldbookWiCount() {
-        const wiEntries = window._fmgWorldEntries || [];
-        const wiSelected = getSelectedWorldInfo().length;
-        const el = document.getElementById('fmg-wb-wi-count');
-        if (el) el.textContent = `${wiSelected}/${wiEntries.length}`;
-    }
-
-    function renderWorldbookHistory() {
-        const container = document.getElementById('fmg-wb-chat-messages');
-        if (!container) return;
-
-        const visibleMessages = worldbookMessages.filter(msg => msg.role !== 'system');
-        clearPendingWorldbookEntries(WORLDBOOK_TAB_KEY_PREFIX);
-        _worldbookEntryIdCounter = 0;
-        container.innerHTML = '';
-
-        if (visibleMessages.length === 0) {
-            container.innerHTML = getWorldbookWelcomeHtml();
-            worldbookAutoScroll = true;
-            updateWorldbookUndoButton();
-            return;
-        }
-
-        visibleMessages.forEach(msg => appendWorldbookMessage(msg.role, msg.content, false));
-        worldbookAutoScroll = true;
-        container.scrollTop = container.scrollHeight;
-        updateWorldbookUndoButton();
-        requestWorldbookTokenCountUpdate();
-    }
-
-    function updateWorldbookUndoButton() {
-        const undoBtn = document.getElementById('fmg-wb-undo');
-        if (!undoBtn) return;
-
-        const hasUndoableRound = worldbookMessages.some(msg => msg.role === 'user');
-        undoBtn.disabled = isWorldbookGenerating || !hasUndoableRound;
-    }
-
-    function setWorldbookFocusMode(enabled) {
-        worldbookFocusMode = enabled === true;
-
-        const container = document.querySelector('.fmg-worldbook-container');
-        if (container) {
-            container.classList.toggle('chat-focused', worldbookFocusMode);
-        }
-
-        const toggleBtn = document.getElementById('fmg-wb-focus-toggle');
-        if (toggleBtn) {
-            toggleBtn.textContent = worldbookFocusMode ? '↕ 展开' : '↕ 专注';
-            toggleBtn.title = worldbookFocusMode ? '显示世界书页面的其他操作区' : '收起非聊天区域，只保留聊天区';
-            toggleBtn.classList.toggle('active', worldbookFocusMode);
-        }
-
-        updatePopupFocusState();
-    }
-
-    function requestWorldbookTokenCountUpdate(delay = 0) {
-        if (worldbookTokenUpdateTimer) {
-            clearTimeout(worldbookTokenUpdateTimer);
-        }
-
-        worldbookTokenUpdateTimer = setTimeout(() => {
-            worldbookTokenUpdateTimer = null;
-            updateWorldbookTokenCount();
-        }, Math.max(0, delay));
-    }
-
-    async function updateWorldbookTokenCount() {
-        const counterEl = document.getElementById('fmg-wb-token-total');
-        if (!counterEl) return;
-
-        const version = ++worldbookTokenUpdateVersion;
-        counterEl.textContent = '总Token ...';
-
-        try {
-            const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
-            if (!context || typeof context.getTokenCountAsync !== 'function') {
-                counterEl.textContent = '总Token --';
-                return;
-            }
-
-            const chunks = [];
-            const systemPrompt = buildWorldbookSystemPrompt();
-            if (systemPrompt) chunks.push(systemPrompt);
-
-            worldbookMessages
-                .filter(msg => msg.role !== 'system' && String(msg.content || '').trim())
-                .forEach(msg => chunks.push(String(msg.content)));
-
-            const inputEl = document.getElementById('fmg-wb-input');
-            const draftText = inputEl && typeof inputEl.value === 'string' ? inputEl.value.trim() : '';
-            if (draftText) chunks.push(draftText);
-
-            const counts = await Promise.all(chunks.map(chunk => context.getTokenCountAsync(String(chunk), 0)));
-            if (version !== worldbookTokenUpdateVersion) return;
-
-            const total = counts.reduce((sum, count) => sum + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
-            counterEl.textContent = `总Token ${total}`;
-        } catch (error) {
-            console.warn('[开场白生成器] 统计世界书 token 失败:', error);
-            if (version === worldbookTokenUpdateVersion) {
-                counterEl.textContent = '总Token --';
-            }
-        }
-    }
-
-    function syncWorldbookSystemPrompt() {
-        const systemPrompt = buildWorldbookSystemPrompt();
-        worldbookMessages = worldbookMessages.filter(msg => msg.role !== 'system');
-
-        if (systemPrompt) {
-            worldbookMessages.unshift({ role: 'system', content: systemPrompt });
-        }
-    }
-
-    function buildWorldbookSystemPrompt() {
-        const charData = window._fmgCharData;
-        if (!charData) return null;
-
-        const worldInfo = getSelectedWorldInfo();
-        const worldInfoText = worldInfo.length > 0
-            ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
-            : '（未选择任何世界书条目）';
-        const editableEntriesText = formatSelectedWorldInfoForUpdate(worldInfo);
-
-        return `你是一个专业的 SillyTavern 世界书（Lorebook）设计助手。
-
-当前角色：${charData.name}
-
-【角色参考信息】
-${getSelectedCharacterInfoText()}
-
-【已选择的世界书上下文】
-${worldInfoText}
-
-【当前已选条目清单（更新已有条目时优先使用这些 UID）】
-${editableEntriesText}
-
-【工作方式】
-1. 如果用户在讨论设定、拆分信息结构、询问条目设计建议，请直接自然回答。
-2. 如果用户明确要求“输出世界书条目”“给我可直接添加的版本”“生成可写入世界书的内容”，你必须在解释后输出一个或多个条目块。
-3. 条目块必须使用下面的精确格式，不要使用 markdown 代码块包裹：
-[WORLDBOOK_ENTRY]
-{
-  "operation": "create",
-  "comment": "条目标题或备注",
-  "keys": ["主关键词1", "主关键词2"],
-  "secondary_keys": ["次级关键词"],
-  "content": "条目完整正文",
-  "constant": false,
-  "selective": true,
-  "position": "at_depth",
-  "depth": 4,
-  "role": "system",
-  "placement_reason": "这条更像写作约束与持续生效的规则，放在 depth system 比普通前置世界书更稳定。",
-  "insertion_order": 100
-}
-[/WORLDBOOK_ENTRY]
-4. 如果是新建条目，"operation" 必须是 "create"，并且不要填写 uid。
-5. 只有在更新已有条目时，"operation" 才能是 "update"，并且必须填写 "uid" 为对应条目的 id。
-6. 如果条目应当常驻，请将 "constant" 设为 true，并将 "keys" 设为空数组。
-7. 如果条目不是常驻条目，"keys" 至少要有一个触发关键词。
-8. "position" 可用值有：
-   - "before_char": 放在角色定义前的普通世界书
-   - "after_char": 放在角色定义后的普通世界书
-   - "before_author_note": 放在作者注前
-   - "after_author_note": 放在作者注后
-   - "before_example_messages": 放在示例对话前
-   - "after_example_messages": 放在示例对话后
-   - "at_depth": 作为 depth 注入，此时还要提供 "depth" 和 "role"
-   - "outlet": 发送到指定 outlet，此时还要提供 "outlet_name"
-9. 当 position 为 "at_depth" 时：
-   - "depth" 必须是数字，默认可用 4
-   - "role" 只能是 "system"、"user"、"assistant"
-10. 当 position 为 "outlet" 时，必须提供 "outlet_name"。
-11. 新建条目时由你决定 position、depth、role 和 "insertion_order"，参考清单中已有条目的位置和顺序安排先后，并给出 "placement_reason"，用一句话说明为什么这个条目更适合放在这个位置。
-12. 更新已有条目时，插入位置、深度、role 和顺序会自动沿用清单中原条目的设置（这是用户自己设置的，不要改动），可以省略 position、depth、role、insertion_order 和 placement_reason。只有用户明确要求调整某个已有条目的位置时，才在正文里说明建议，由用户在卡片上手动调整。
-13. "content" 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-14. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
-   - 字符串值必须使用英文双引号包裹
-   - 字符串内部如果需要换行，必须写成 \\n，不要直接在字符串中换行
-   - 字符串内部如果需要英文双引号，必须写成 \\\"
-   - 最后一个字段或数组元素后面不要加逗号
-15. 如果用户说“更新某个已有条目”，优先从“当前已选条目清单”里选择最匹配的条目，并自动填写 operation="update" 和对应 uid，不要反问用户去查 uid。
-16. 只有在你无法从“当前已选条目清单”中可靠定位目标条目时，才向用户确认具体要更新哪一条。
-17. 只有在用户明确要求产出条目时才输出条目块；普通讨论时不要输出条目块。`;
-    }
-
-    function stripDiscussMessageBlocks(content) {
-        return String(content || '')
-            .replace(/\[EDIT:\w+\][\s\S]*?\[\/EDIT\]/g, '')
-            .replace(/\[(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\][\s\S]*?\[\/(?:WORLDBOOK_ENTRY|WORLDINFO_ENTRY)\]/g, '')
-            .trim();
-    }
-
-    function deriveWorldbookCommentFromDiscuss(content, index) {
-        const lines = stripDiscussMessageBlocks(content)
-            .split('\n')
-            .map(line => line.replace(/^[#*\-\d.\s>]+/, '').trim())
-            .filter(Boolean);
-
-        const firstLine = lines[0] || `讨论条目 ${index + 1}`;
-        return firstLine.length > 24 ? `${firstLine.slice(0, 24).trim()}...` : firstLine;
-    }
-
-    function deriveWorldbookKeysFromDiscuss(comment, content) {
-        const normalizedComment = String(comment || '').replace(/[：:。！？!?,，、；;（）()\[\]【】]/g, ' ').trim();
-        const candidates = normalizedComment
-            .split(/\s+/)
-            .map(part => part.trim())
-            .filter(Boolean)
-            .slice(0, 3);
-
-        if (candidates.length > 0) {
-            return candidates;
-        }
-
-        const stripped = stripDiscussMessageBlocks(content);
-        if (!stripped) {
-            return ['讨论条目'];
-        }
-
-        const fallback = stripped.slice(0, 18).trim();
-        return [fallback || '讨论条目'];
-    }
-
-    function buildDirectWorldbookEntriesFromDiscuss(messages) {
-        return messages.map((message, index) => {
-            const cleanedContent = stripDiscussMessageBlocks(message.content);
-            const comment = deriveWorldbookCommentFromDiscuss(cleanedContent, index);
-            const keys = discussWorldbookDraftConfig.constant
-                ? []
-                : deriveWorldbookKeysFromDiscuss(comment, cleanedContent);
-
-            return {
-                operation: 'create',
-                uid: null,
-                comment,
-                keys,
-                secondary_keys: [],
-                content: cleanedContent,
-                constant: discussWorldbookDraftConfig.constant === true,
-                selective: discussWorldbookDraftConfig.constant === true ? false : true,
-                position: discussWorldbookDraftConfig.position,
-                depth: Number.isFinite(Number(discussWorldbookDraftConfig.depth))
-                    ? Number(discussWorldbookDraftConfig.depth)
-                    : 4,
-                role: discussWorldbookDraftConfig.position === WORLDBOOK_POSITIONS.atDepth
-                    ? discussWorldbookDraftConfig.role
-                    : null,
-                outlet_name: '',
-                placement_reason: '由讨论页勾选内容直接转存为世界书草稿。',
-                insertion_order: Number.isFinite(Number(discussWorldbookDraftConfig.order))
-                    ? Number(discussWorldbookDraftConfig.order)
-                    : 100,
-                enabled: true,
-                vectorized: false
-            };
-        }).filter(entry => String(entry.content || '').trim());
-    }
-
-    async function generateWorldbookFromDiscussSelection() {
-        if (isDiscussWorldbookApplying) return;
-        if (isDiscussGenerating) {
-            showStatus('fmg-discuss-status', 'error', '请先等待当前讨论回复完成，再转世界书');
-            return;
-        }
-        if (!window._fmgCharData) {
-            showStatus('fmg-discuss-status', 'error', '请先选择角色并刷新数据');
-            return;
-        }
-
-        const selectedMessages = getSelectedDiscussAssistantMessages();
-        if (selectedMessages.length === 0) {
-            showStatus('fmg-discuss-status', 'error', '请先勾选至少一条 AI 回复');
-            return;
-        }
-
-        isDiscussWorldbookApplying = true;
-        renderDiscussionHistory();
-        updateDiscussWorldbookSelectionUI();
-        showStatus('fmg-discuss-status', 'loading', `正在把 ${selectedMessages.length} 条 AI 回复直接写入世界书...`);
-
-        try {
-            const directEntries = buildDirectWorldbookEntriesFromDiscuss(selectedMessages);
-            if (directEntries.length === 0) {
-                throw new Error('勾选的消息里没有可直接写入的正文内容');
-            }
-
-            const results = await applyWorldbookEntriesBatch(directEntries);
-            const successResults = results.filter(result => result.isFailed !== true);
-            const failedCount = results.filter(result => result.isFailed === true).length;
-            if (successResults.length === 0) {
-                throw new Error(results[0]?.error?.message || '没有条目成功写入世界书');
-            }
-
-            const addedCount = successResults.filter(result => result.isUpdate !== true).length;
-            const updatedCount = successResults.filter(result => result.isUpdate === true).length;
-            const summaryParts = [];
-
-            if (addedCount > 0) summaryParts.push(`新增 ${addedCount} 条`);
-            if (updatedCount > 0) summaryParts.push(`更新 ${updatedCount} 条`);
-            if (failedCount > 0) summaryParts.push(`${failedCount} 条写入失败`);
-
-            setDiscussWorldbookSelectionMode(false);
-            showStatus('fmg-discuss-status', 'success', `已写入世界书：${summaryParts.join('，') || `共 ${successResults.length} 条`}`);
-            if (typeof toastr !== 'undefined') {
-                toastr.success(`世界书条目已写入：${summaryParts.join('，') || `共 ${successResults.length} 条`}`);
-            }
-        } catch (error) {
-            console.error('[开场白生成器] 讨论内容转世界书失败:', error);
-            showStatus('fmg-discuss-status', 'error', '转世界书失败: ' + error.message);
-            if (typeof toastr !== 'undefined') {
-                toastr.error('转世界书失败: ' + error.message);
-            }
-        } finally {
-            isDiscussWorldbookApplying = false;
-            renderDiscussionHistory();
-            updateDiscussWorldbookSelectionUI();
-        }
-    }
 
     function normalizeStringArray(value) {
         if (Array.isArray(value)) {
@@ -4524,271 +3424,6 @@ ${editableEntriesText}
         `;
     }
 
-    function renderWorldbookAssistantContent(content) {
-        const entries = parseWorldbookEntryBlocks(content);
-        if (entries.length === 0) {
-            return escapeHtml(content);
-        }
-
-        let html = '';
-        let lastIndex = 0;
-
-        for (const entry of entries) {
-            if (entry.start > lastIndex) {
-                const plainText = content.substring(lastIndex, entry.start).trim();
-                if (plainText) {
-                    html += '<div class="fmg-chat-plain">' + escapeHtml(plainText) + '</div>';
-                }
-            }
-
-            const entryKey = WORLDBOOK_TAB_KEY_PREFIX + (++_worldbookEntryIdCounter);
-            if (!entry.invalid) {
-                window._fmgPendingWorldbookEntries[entryKey] = {
-                    operation: entry.operation,
-                    uid: entry.uid,
-                    comment: entry.comment,
-                    keys: entry.keys,
-                    secondary_keys: entry.secondary_keys,
-                    content: entry.content,
-                    constant: entry.constant,
-                    vectorized: false,
-                    selective: entry.selective,
-                    position: entry.position,
-                    depth: entry.depth,
-                    role: entry.role,
-                    outlet_name: entry.outlet_name,
-                    placement_reason: entry.placement_reason,
-                    insertion_order: entry.insertion_order,
-                    enabled: entry.enabled,
-                    keep_placement: entry.keep_placement === true
-                };
-            }
-            html += renderWorldbookEntryCard(entry, entryKey);
-            lastIndex = entry.end;
-        }
-
-        if (lastIndex < content.length) {
-            const remaining = content.substring(lastIndex).trim();
-            if (remaining) {
-                html += '<div class="fmg-chat-plain">' + escapeHtml(remaining) + '</div>';
-            }
-        }
-
-        return html;
-    }
-
-    function appendWorldbookMessage(role, content, isStreaming = false) {
-        const container = document.getElementById('fmg-wb-chat-messages');
-        if (!container) return;
-        const shouldAutoScroll = role === 'user' || worldbookAutoScroll || isDiscussNearBottom(container);
-
-        const welcome = container.querySelector('.fmg-chat-welcome');
-        if (welcome) welcome.remove();
-
-        let bubble = container.querySelector('.fmg-chat-bubble.streaming');
-
-        if (!bubble || role === 'user') {
-            bubble = document.createElement('div');
-            bubble.className = `fmg-chat-bubble ${role}`;
-            if (isStreaming) bubble.classList.add('streaming');
-
-            const label = document.createElement('div');
-            label.className = 'fmg-chat-label';
-            label.textContent = role === 'user' ? '👤 你' : '🤖 AI';
-            bubble.appendChild(label);
-
-            const text = document.createElement('div');
-            text.className = 'fmg-chat-text';
-            bubble.appendChild(text);
-
-            container.appendChild(bubble);
-        }
-
-        const textEl = bubble.querySelector('.fmg-chat-text');
-        if (isStreaming) {
-            textEl.innerHTML = escapeHtml(content) + '<span class="fmg-cursor">▌</span>';
-        } else {
-            textEl.innerHTML = role === 'assistant' ? renderWorldbookAssistantContent(content) : escapeHtml(content);
-            bubble.classList.remove('streaming');
-        }
-
-        if (shouldAutoScroll) {
-            container.scrollTop = container.scrollHeight;
-            worldbookAutoScroll = true;
-        }
-
-        return bubble;
-    }
-
-    function undoLastWorldbookRound() {
-        if (isWorldbookGenerating) {
-            showStatus('fmg-wb-status', 'error', '请先停止当前生成，再撤回上一轮');
-            return;
-        }
-
-        let lastUserIndex = -1;
-        for (let i = worldbookMessages.length - 1; i >= 0; i--) {
-            if (worldbookMessages[i].role === 'user') {
-                lastUserIndex = i;
-                break;
-            }
-        }
-
-        if (lastUserIndex < 0) {
-            showStatus('fmg-wb-status', 'error', '当前没有可撤回的上一轮');
-            return;
-        }
-
-        const restoredText = worldbookMessages[lastUserIndex].content || '';
-        worldbookMessages.splice(lastUserIndex);
-
-        if (worldbookMessages.every(msg => msg.role === 'system')) {
-            worldbookMessages = [];
-        }
-
-        saveChatSession('worldbook');
-        renderWorldbookHistory();
-
-        const input = document.getElementById('fmg-wb-input');
-        if (input) {
-            input.value = restoredText;
-            input.focus();
-            input.setSelectionRange(input.value.length, input.value.length);
-        }
-
-        showStatus('fmg-wb-status', 'success', '已撤回上一轮，并恢复到输入框');
-    }
-
-    function clearWorldbookDiscussion() {
-        if (isWorldbookGenerating) stopWorldbookGeneration();
-
-        worldbookMessages = [];
-        currentWorldbookSessionId = null;
-        worldbookAutoScroll = true;
-        renderWorldbookHistory();
-        renderChatSessionControls();
-
-        const statusEl = document.getElementById('fmg-wb-status');
-        if (statusEl) statusEl.style.display = 'none';
-    }
-
-    async function callWorldbookStreamMessages(messages, onChunk, onDone, onError) {
-        worldbookAbortController = new AbortController();
-
-        try {
-            if (settings.apiType === 'openai') {
-                await callOpenAIStreamMessages(messages, onChunk, onDone, worldbookAbortController.signal);
-            } else {
-                await callGeminiStreamMessages(messages, onChunk, onDone, worldbookAbortController.signal);
-            }
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                console.log('[开场白生成器] 世界书请求已中断');
-                return;
-            }
-            onError(error);
-        } finally {
-            worldbookAbortController = null;
-        }
-    }
-
-    async function sendWorldbookMessage() {
-        if (isWorldbookGenerating) return;
-
-        const input = document.getElementById('fmg-wb-input');
-        const userText = input.value.trim();
-        if (!userText) return;
-
-        if (!settings.apiUrl || !settings.apiKey) {
-            showStatus('fmg-wb-status', 'error', '请先在API页面配置API');
-            return;
-        }
-
-        if (!window._fmgCharData) {
-            showStatus('fmg-wb-status', 'error', '请先选择角色并刷新数据');
-            return;
-        }
-
-        input.value = '';
-        appendWorldbookMessage('user', userText);
-
-        syncWorldbookSystemPrompt();
-
-        worldbookMessages.push({ role: 'user', content: userText });
-        requestWorldbookTokenCountUpdate();
-
-        isWorldbookGenerating = true;
-        const sendBtn = document.getElementById('fmg-wb-send');
-        if (sendBtn) {
-            sendBtn.textContent = '⏹ 停止';
-            sendBtn.classList.remove('fmg-btn-primary');
-            sendBtn.classList.add('fmg-btn-danger');
-            sendBtn.onclick = () => stopWorldbookGeneration();
-        }
-        updateWorldbookUndoButton();
-
-        try {
-            await callWorldbookStreamMessages(
-                [...worldbookMessages],
-                (content) => {
-                    appendWorldbookMessage('assistant', content, true);
-                },
-                (finalContent) => {
-                    appendWorldbookMessage('assistant', finalContent, false);
-                    worldbookMessages.push({ role: 'assistant', content: finalContent });
-                    saveChatSession('worldbook');
-                    requestWorldbookTokenCountUpdate();
-                    finishWorldbookGeneration();
-                },
-                (error) => {
-                    appendWorldbookMessage('assistant', '❌ 错误: ' + error.message, false);
-                    finishWorldbookGeneration();
-                    showStatus('fmg-wb-status', 'error', '生成失败: ' + error.message);
-                }
-            );
-        } catch (error) {
-            appendWorldbookMessage('assistant', '❌ 错误: ' + error.message, false);
-            finishWorldbookGeneration();
-        }
-    }
-
-    function stopWorldbookGeneration() {
-        if (worldbookAbortController) {
-            worldbookAbortController.abort();
-            worldbookAbortController = null;
-        }
-
-        const streaming = document.querySelector('#fmg-wb-chat-messages .fmg-chat-bubble.streaming');
-        if (streaming) {
-            streaming.classList.remove('streaming');
-            const cursor = streaming.querySelector('.fmg-cursor');
-            if (cursor) cursor.remove();
-
-            const textEl = streaming.querySelector('.fmg-chat-text');
-            if (textEl && textEl.textContent.trim()) {
-                const partialContent = textEl.textContent;
-                textEl.innerHTML = renderWorldbookAssistantContent(partialContent);
-                worldbookMessages.push({ role: 'assistant', content: partialContent });
-                saveChatSession('worldbook');
-                requestWorldbookTokenCountUpdate();
-            }
-        }
-
-        finishWorldbookGeneration();
-    }
-
-    function finishWorldbookGeneration() {
-        isWorldbookGenerating = false;
-        const sendBtn = document.getElementById('fmg-wb-send');
-        if (sendBtn) {
-            sendBtn.textContent = '发送';
-            sendBtn.classList.remove('fmg-btn-danger');
-            sendBtn.classList.add('fmg-btn-primary');
-            sendBtn.onclick = null;
-        }
-        updateWorldbookUndoButton();
-    }
-
     function createWorldbookEntryShell(existingEntries) {
         const numericIds = existingEntries.map(entry => Number(entry.uid)).filter(Number.isFinite);
         const newUid = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 0;
@@ -4971,33 +3606,8 @@ ${editableEntriesText}
         };
     }
 
-    async function applyWorldbookEntriesBatch(entries) {
-        const results = [];
-        let latestContext = null;
-
-        for (const entry of entries) {
-            try {
-                const result = await persistWorldbookEntry(entry);
-                latestContext = result.context;
-                results.push(result);
-            } catch (error) {
-                results.push({
-                    entry,
-                    error,
-                    isFailed: true
-                });
-            }
-        }
-
-        if (latestContext) {
-            await loadWorldInfoList(latestContext, true);
-        }
-        requestWorldbookTokenCountUpdate();
-        return results;
-    }
-
     async function applyWorldbookEntry(entryData, buttonEl) {
-        const statusId = buttonEl?.closest('.fmg-discuss-container') ? 'fmg-discuss-status' : 'fmg-wb-status';
+        const statusId = 'fmg-discuss-status';
         try {
             const result = await persistWorldbookEntry(entryData);
 
@@ -5009,7 +3619,6 @@ ${editableEntriesText}
             if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${result.isUpdate ? '更新' : '添加'}`);
             await loadWorldInfoList(result.context, true);
             requestDiscussTokenCountUpdate();
-            requestWorldbookTokenCountUpdate();
 
         } catch (error) {
             console.error('[开场白生成器] 添加世界书条目失败:', error);
@@ -5560,7 +4169,6 @@ ${designBrief}
             sendBtn.textContent = '⏹ 停止';
             sendBtn.classList.remove('fmg-btn-primary');
             sendBtn.classList.add('fmg-btn-danger');
-            sendBtn.onclick = () => stopDiscussGeneration();
         }
         updateDiscussUndoButton();
 
@@ -5574,7 +4182,7 @@ ${designBrief}
                     const assistantMessage = createChatMessage('assistant', finalContent);
                     discussMessages.push(assistantMessage);
                     appendChatMessage('assistant', finalContent, false, assistantMessage.id);
-                    saveChatSession('discuss');
+                    saveChatSession();
                     requestDiscussTokenCountUpdate();
                     finishDiscussGeneration();
                 },
@@ -5605,7 +4213,7 @@ ${designBrief}
             const textEl = streaming.querySelector('.fmg-chat-text');
             if (textEl && textEl.textContent.trim()) {
                 discussMessages.push(createChatMessage('assistant', textEl.textContent));
-                saveChatSession('discuss');
+                saveChatSession();
                 requestDiscussTokenCountUpdate();
                 renderDiscussionHistory();
             }
@@ -5620,10 +4228,8 @@ ${designBrief}
             sendBtn.textContent = '发送';
             sendBtn.classList.remove('fmg-btn-danger');
             sendBtn.classList.add('fmg-btn-primary');
-            sendBtn.onclick = null; // 恢复由事件委托处理
         }
         updateDiscussUndoButton();
-        updateDiscussWorldbookSelectionUI();
     }
 
     function clearDiscussion() {
@@ -5633,8 +4239,6 @@ ${designBrief}
         discussMessages = [];
         currentDiscussSessionId = null;
         discussAutoScroll = true;
-        selectedDiscussWorldbookMessageIds.clear();
-        discussWorldbookSelectionMode = false;
         renderDiscussionHistory();
         requestDiscussTokenCountUpdate();
         renderChatSessionControls();
@@ -6026,40 +4630,6 @@ ${userRequest}
         showStatus('fmg-status', 'success', '生成已停止');
     }
 
-    // 兼容旧的非流式预览（保留以防需要）
-    function showPreview(content) {
-        const existingPreview = document.getElementById('fmg-preview-modal');
-        if (existingPreview) existingPreview.remove();
-
-        const modal = document.createElement('div');
-        modal.id = 'fmg-preview-modal';
-        modal.innerHTML = `
-            <div class="fmg-preview-overlay"></div>
-            <div class="fmg-preview-content">
-                <div class="fmg-preview-header">
-                    <h4>📝 开场白预览</h4>
-                    <button class="fmg-close-btn" id="fmg-preview-close">×</button>
-                </div>
-                <div class="fmg-preview-body">
-                    <div class="fmg-preview-text">${escapeHtml(content)}</div>
-                </div>
-                <div class="fmg-preview-footer">
-                    <button class="fmg-btn fmg-btn-secondary" id="fmg-preview-cancel">取消</button>
-                    <button class="fmg-btn fmg-btn-primary" id="fmg-preview-apply">✅ 应用到开场白</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        // 缓存内容
-        window._fmgPendingContent = content;
-
-        // 绑定事件
-        document.getElementById('fmg-preview-close').onclick = closePreview;
-        document.getElementById('fmg-preview-cancel').onclick = closePreview;
-        document.getElementById('fmg-preview-apply').onclick = applyFirstMessage;
-    }
-
     function closePreview() {
         const preview = document.getElementById('fmg-preview-modal');
         if (preview) preview.remove();
@@ -6377,84 +4947,6 @@ ${userRequest}
         }
 
         onDone(fullContent);
-    }
-
-    // 保留非流式版本（用于测试或回退）
-    async function callAPI(prompt) {
-        if (settings.apiType === 'openai') {
-            return await callOpenAI(prompt);
-        } else {
-            return await callGemini(prompt);
-        }
-    }
-
-    async function callOpenAI(prompt) {
-        const url = settings.apiUrl.replace(/\/$/, '') + '/chat/completions';
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${settings.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.8
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API错误: ${response.status} - ${error}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.choices || !result.choices[0]) {
-            console.error('[开场白生成器] API响应异常:', result);
-            throw new Error('API响应格式异常，请检查API类型是否选择正确');
-        }
-        if (!result.choices[0].message || !result.choices[0].message.content) {
-            console.error('[开场白生成器] API响应内容缺失:', result);
-            throw new Error('API未返回有效内容，请检查模型是否正确');
-        }
-
-        return result.choices[0].message.content;
-    }
-
-    async function callGemini(prompt) {
-        const url = settings.apiUrl.replace(/\/$/, '') + '/models/' + settings.model + ':generateContent?key=' + settings.apiKey;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.8 }
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API错误: ${response.status} - ${error}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.candidates || !result.candidates[0]) {
-            console.error('[开场白生成器] Gemini响应异常:', result);
-            if (result.error) {
-                throw new Error(`Gemini错误: ${result.error.message || JSON.stringify(result.error)}`);
-            }
-            throw new Error('Gemini响应格式异常，请检查API配置');
-        }
-        if (!result.candidates[0].content || !result.candidates[0].content.parts) {
-            console.error('[开场白生成器] Gemini响应内容缺失:', result);
-            throw new Error('Gemini未返回有效内容，可能是模型拒绝生成或配置错误');
-        }
-
-        return result.candidates[0].content.parts[0].text;
     }
 
     // ========================================

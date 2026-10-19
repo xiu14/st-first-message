@@ -1,0 +1,11 @@
+{
+  "name": "st-first-message-generator",
+  "private": true,
+  "description": "SillyTavern 开场白生成器扩展（自用版）",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
+  }
+}
