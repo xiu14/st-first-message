@@ -3424,18 +3424,16 @@ ${editableEntriesText}
         `;
     }
 
+    // 新条目使用干净的默认值，不复制已有条目（否则会继承它的概率、分组、sticky 等设置）
     function createWorldbookEntryShell(existingEntries) {
-        const numericIds = existingEntries.map(entry => Number(entry.uid)).filter(Number.isFinite);
-        const newUid = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 0;
-        const lastEntry = existingEntries.length > 0 ? structuredClone(existingEntries[existingEntries.length - 1]) : null;
-
-        if (lastEntry) {
-            lastEntry.uid = newUid;
-            return lastEntry;
-        }
+        const nextNumber = (field) => {
+            const values = existingEntries.map(entry => Number(entry[field])).filter(Number.isFinite);
+            return values.length > 0 ? Math.max(...values) + 1 : 0;
+        };
 
         return {
-            uid: newUid,
+            uid: nextNumber('uid'),
+            displayIndex: nextNumber('displayIndex'),
             key: [],
             keysecondary: [],
             comment: '',
@@ -3590,9 +3588,9 @@ ${editableEntriesText}
         }
 
         const savedSelections = getSavedWorldInfoSelections();
+        // 只记录 uid；按标题或关键词记录会顺带勾选同名的其他条目
         const persistedIdentifier = getWorldInfoIdentifier(targetEntry, worldEntries.indexOf(targetEntry));
-        const legacyIdentifiers = getLegacyWorldInfoIdentifiers(targetEntry, worldEntries.indexOf(targetEntry));
-        const mergedSelections = [...new Set([...savedSelections, persistedIdentifier, ...legacyIdentifiers])];
+        const mergedSelections = [...new Set([...savedSelections, persistedIdentifier])];
         if (mergedSelections.length !== savedSelections.length) {
             setSavedWorldInfoSelections(mergedSelections);
             saveSettings();
