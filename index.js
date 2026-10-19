@@ -2352,7 +2352,11 @@ ${editableEntriesText}
 6. position 为 at_depth 时必须提供 depth 和 role，role 只能是 system、user、assistant。
 7. position 为 outlet 时必须提供 outlet_name。
 8. content 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
-9. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析。
+9. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
+   - 字符串值必须使用英文双引号包裹
+   - 字符串内部需要换行时写成 \\n，不要直接在字符串中换行
+   - 字符串内部需要英文双引号时写成 \\"
+   - 最后一个字段或数组元素后面不要加逗号
 10. 只有在用户明确要求产出世界书条目时才输出 [WORLDBOOK_ENTRY] 块；普通讨论和角色字段修改时不要输出世界书条目块。
 11. 如果用户同时要求修改角色卡和生成世界书，可以同时输出 [EDIT] 块和 [WORLDBOOK_ENTRY] 块，但每个块都必须格式完整。`);
 
