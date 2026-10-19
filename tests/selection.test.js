@@ -21,13 +21,11 @@ const visibleNames = (modal) => Array.from(modal.querySelectorAll('.fmg-select-i
     .filter(item => item.style.display !== 'none')
     .map(item => item.querySelector('.fmg-select-name').textContent);
 
-test('选择弹窗显示条目的位置、顺序和关键词', async () => {
+test('选择弹窗只显示名称和状态标签，不显示位置和顺序', async () => {
     const { modal } = await openModal();
-    const meta = modal.querySelector('.fmg-select-item .fmg-select-meta').textContent;
-    assert.match(meta, /系统在深度/);
-    assert.match(meta, /depth=2/);
-    assert.match(meta, /顺序：250/);
-    assert.match(meta, /关键词：a/);
+    const item = modal.querySelector('.fmg-select-item');
+    assert.equal(item.querySelector('.fmg-select-meta'), null);
+    assert.doesNotMatch(item.textContent, /顺序|position/);
 });
 
 test('搜索按名称、关键词和内容过滤，全选只作用于搜索结果', async () => {

@@ -840,16 +840,6 @@
     white-space: nowrap;
 }
 
-.fmg-select-meta {
-    margin: 2px 0 0 24px;
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--SmartThemeQuoteColor, #999);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .fmg-select-search {
     padding: 8px 8px 0;
     flex-shrink: 0;

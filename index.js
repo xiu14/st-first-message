@@ -1540,18 +1540,9 @@
             : savedSelections.includes(identifier);
 
         const badges = [];
-        let metaHtml = '';
         if (isWorldInfo) {
             badges.push(entry.constant ? '<span class="fmg-badge">常驻</span>' : '<span class="fmg-badge fmg-badge-green">绿灯</span>');
             if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
-
-            const keysText = Array.isArray(entry.key) && entry.key.length > 0 ? entry.key.join(', ') : '';
-            const metaParts = [
-                `位置：${formatWorldInfoPlacement(entry)}`,
-                `顺序：${entry.order ?? '未知'}`,
-                keysText ? `关键词：${keysText}` : ''
-            ].filter(Boolean);
-            metaHtml = `<div class="fmg-select-meta">${escapeHtml(metaParts.join(' · '))}</div>`;
         } else {
             badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
             if (entry.role) badges.push(`<span class="fmg-badge fmg-badge-role">${escapeHtml(entry.role)}</span>`);
@@ -1567,7 +1558,6 @@
                     <span class="fmg-select-name">${escapeHtml(name)}</span>
                     ${badges.join('')}
                 </label>
-                ${metaHtml}
             </div>
         `;
     }
