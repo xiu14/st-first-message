@@ -3915,11 +3915,8 @@ ${designBrief}
 
             const userMessage = `请为角色"${charData.name}"生成状态栏，需求如下：\n${userPrompt}`;
 
-            let fullContent = '';
-            await callAPIStreamMessages(
-                [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
-                (content) => { fullContent = content; },
-                (finalContent) => {
+            await startChatStream([{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }], {
+                onDone: (finalContent) => {
                     try {
                         const result = parseStatusBarResult(finalContent);
                         window._fmgStatusBarResult = result;
@@ -3990,11 +3987,11 @@ ${designBrief}
                     }
                     if (genBtn) genBtn.disabled = false;
                 },
-                (error) => {
+                onError: (error) => {
                     showStatus('fmg-sb-status', 'error', '生成失败: ' + error.message);
                     if (genBtn) genBtn.disabled = false;
                 }
-            );
+            }).promise;
         } catch (e) {
             showStatus('fmg-sb-status', 'error', '生成失败: ' + e.message);
             if (genBtn) genBtn.disabled = false;
@@ -4171,12 +4168,11 @@ ${designBrief}
         updateDiscussUndoButton();
 
         try {
-            await callAPIStreamMessages(
-                [...discussMessages],
-                (content) => {
+            const { controller, promise } = startChatStream([...discussMessages], {
+                onChunk: (content) => {
                     appendChatMessage('assistant', content, true);
                 },
-                (finalContent) => {
+                onDone: (finalContent) => {
                     const assistantMessage = createChatMessage('assistant', finalContent);
                     discussMessages.push(assistantMessage);
                     appendChatMessage('assistant', finalContent, false, assistantMessage.id);
@@ -4184,12 +4180,15 @@ ${designBrief}
                     requestDiscussTokenCountUpdate();
                     finishDiscussGeneration();
                 },
-                (error) => {
+                onError: (error) => {
                     appendChatMessage('assistant', '❌ 错误: ' + error.message, false);
                     finishDiscussGeneration();
                     showStatus('fmg-discuss-status', 'error', '生成失败: ' + error.message);
                 }
-            );
+            });
+            discussAbortController = controller;
+            await promise;
+            if (discussAbortController === controller) discussAbortController = null;
         } catch (e) {
             appendChatMessage('assistant', '❌ 错误: ' + e.message, false);
             finishDiscussGeneration();
@@ -4246,45 +4245,35 @@ ${designBrief}
     }
 
     // ========================================
-    // 多轮对话流式 API 调用
+    // 流式 API 调用（讨论、开场白、状态栏共用）
     // ========================================
 
-    async function callAPIStreamMessages(messages, onChunk, onDone, onError) {
-        discussAbortController = new AbortController();
-
-        try {
-            if (settings.apiType === 'openai') {
-                await callOpenAIStreamMessages(messages, onChunk, onDone, discussAbortController.signal);
-            } else {
-                await callGeminiStreamMessages(messages, onChunk, onDone, discussAbortController.signal);
-            }
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                console.log('[开场白生成器] 讨论请求已中断');
-                return;
-            }
-            onError(e);
-        } finally {
-            discussAbortController = null;
-        }
+    /**
+     * 发起一次流式对话请求，每次调用使用独立的 AbortController。
+     * 完成时调用 onDone，出错时调用 onError，被中断时两者都不调用。
+     * @returns {{ controller: AbortController, promise: Promise<void> }}
+     */
+    function startChatStream(messages, { onChunk, onDone, onError }) {
+        const controller = new AbortController();
+        const promise = streamChat(messages, { signal: controller.signal, onChunk })
+            .then(onDone, (error) => {
+                if (error?.name === 'AbortError') {
+                    console.log('[开场白生成器] 请求已中断');
+                    return;
+                }
+                onError(error);
+            });
+        return { controller, promise };
     }
 
-    async function callOpenAIStreamMessages(messages, onChunk, onDone, signal) {
-        const url = settings.apiUrl.replace(/\/$/, '') + '/chat/completions';
-
-        const response = await fetch(url, {
+    async function streamChat(messages, { signal, onChunk }) {
+        const isOpenAI = settings.apiType === 'openai';
+        const request = isOpenAI ? buildOpenAIRequest(messages) : buildGeminiRequest(messages);
+        const response = await fetch(request.url, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${settings.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                messages: messages,
-                temperature: 0.8,
-                stream: true
-            }),
-            signal: signal
+            headers: request.headers,
+            body: JSON.stringify(request.body),
+            signal
         });
 
         if (!response.ok) {
@@ -4292,49 +4281,50 @@ ${designBrief}
             throw new Error(`API错误: ${response.status} - ${error}`);
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+        const extractChunk = isOpenAI ? extractOpenAIChunk : extractGeminiChunk;
         let fullContent = '';
-        let buffer = '';
+        let finishReason = '';
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const text = json.choices?.[0]?.delta?.content || '';
-                        if (text) {
-                            fullContent += text;
-                            onChunk(fullContent);
-                        }
-                    } catch (e) {
-                        console.warn('[开场白生成器] 解析流数据失败:', trimmed, e);
-                    }
-                }
+        await readEventStream(response, (json) => {
+            const { text, finish, error } = extractChunk(json);
+            if (error) throw new Error(error);
+            if (finish) finishReason = finish;
+            if (text) {
+                fullContent += text;
+                if (onChunk) onChunk(fullContent);
             }
+        });
+
+        // 被安全过滤或上游出错时可能只返回结束原因，不能当作空回复静默成功
+        if (!fullContent.trim()) {
+            throw new Error(finishReason ? `模型没有返回内容（结束原因：${finishReason}）` : '模型没有返回内容');
         }
-        onDone(fullContent);
+        return fullContent;
     }
 
-    async function callGeminiStreamMessages(messages, onChunk, onDone, signal) {
-        const url = settings.apiUrl.replace(/\/$/, '') + '/models/' + settings.model + ':streamGenerateContent?key=' + settings.apiKey + '&alt=sse';
+    function buildOpenAIRequest(messages) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
 
-        // 将 messages 转换为 Gemini 格式
-        let systemInstruction = null;
+        return {
+            url: settings.apiUrl.replace(/\/$/, '') + '/chat/completions',
+            headers,
+            body: {
+                model: settings.model,
+                messages,
+                temperature: 0.8,
+                stream: true
+            }
+        };
+    }
+
+    function buildGeminiRequest(messages) {
+        const systemParts = [];
         const contents = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction = { parts: [{ text: msg.content }] };
+                systemParts.push(msg.content);
             } else {
                 contents.push({
                     role: msg.role === 'assistant' ? 'model' : 'user',
@@ -4344,56 +4334,102 @@ ${designBrief}
         }
 
         const body = {
-            contents: contents,
+            contents,
             generationConfig: { temperature: 0.8 }
         };
-        if (systemInstruction) {
-            body.systemInstruction = systemInstruction;
+        if (systemParts.length > 0) {
+            body.systemInstruction = { parts: [{ text: systemParts.join('\n\n') }] };
         }
 
-        const response = await fetch(url, {
-            method: 'POST',
+        // Key 放在查询参数里，兼容只认 ?key= 的 Gemini 格式中转
+        const keyParam = settings.apiKey ? `key=${encodeURIComponent(settings.apiKey)}&` : '';
+        return {
+            url: `${settings.apiUrl.replace(/\/$/, '')}/models/${settings.model}:streamGenerateContent?${keyParam}alt=sse`,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: signal
-        });
+            body
+        };
+    }
 
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API错误: ${response.status} - ${error}`);
+    // 同时兼容流式增量（delta）和不支持流式时返回的完整消息（message）
+    function extractOpenAIChunk(json) {
+        if (json.error) {
+            return { error: `API错误: ${json.error.message || JSON.stringify(json.error)}` };
         }
+        const choice = json.choices?.[0];
+        return {
+            text: choice?.delta?.content ?? choice?.message?.content ?? '',
+            finish: choice?.finish_reason || ''
+        };
+    }
 
+    function extractGeminiChunk(json) {
+        if (json.error) {
+            return { error: `Gemini错误: ${json.error.message || JSON.stringify(json.error)}` };
+        }
+        const candidate = json.candidates?.[0];
+        const text = (candidate?.content?.parts || [])
+            .filter(part => !part.thought)
+            .map(part => part.text || '')
+            .join('');
+        return {
+            text,
+            finish: json.promptFeedback?.blockReason || candidate?.finishReason || ''
+        };
+    }
+
+    /**
+     * 逐条解析 SSE（data: ...）事件。响应不是 SSE 时，把整个响应体当作一个 JSON 事件。
+     */
+    async function readEventStream(response, onEvent) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let fullContent = '';
         let buffer = '';
+        let rawText = '';
+        let sawEvent = false;
+
+        const handleLine = (line) => {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) return;
+            const data = trimmed.slice(5).trim();
+            sawEvent = true;
+            if (!data || data === '[DONE]') return;
+
+            let json;
+            try {
+                json = JSON.parse(data);
+            } catch (e) {
+                console.warn('[开场白生成器] 解析流数据失败:', data, e);
+                return;
+            }
+            onEvent(json);
+        };
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
+            const text = decoder.decode(value, { stream: true });
+            rawText += text;
+            buffer += text;
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                        if (text) {
-                            fullContent += text;
-                            onChunk(fullContent);
-                        }
-                    } catch (e) {
-                        console.warn('[开场白生成器] 解析Gemini流数据失败:', trimmed, e);
-                    }
-                }
-            }
+            lines.forEach(handleLine);
         }
-        onDone(fullContent);
+
+        const tail = decoder.decode();
+        rawText += tail;
+        buffer += tail;
+        if (buffer) handleLine(buffer);
+
+        if (!sawEvent && rawText.trim()) {
+            let json;
+            try {
+                json = JSON.parse(rawText);
+            } catch (_) {
+                throw new Error('无法解析 API 响应：' + rawText.trim().slice(0, 200));
+            }
+            onEvent(json);
+        }
     }
 
     // ========================================
@@ -4472,25 +4508,24 @@ ${designBrief}
             showStreamPreview();
 
             // 流式调用API
-            await callAPIStream(
-                prompt,
-                // onChunk: 每次收到新内容
-                (content) => {
+            const { controller, promise } = startChatStream([{ role: 'user', content: prompt }], {
+                onChunk: (content) => {
                     updateStreamPreview(content, false);
                 },
-                // onDone: 生成完成
-                (finalContent) => {
+                onDone: (finalContent) => {
                     updateStreamPreview(finalContent, true);
                     showStatus('fmg-status', 'success', '生成完成！请预览并确认');
                     // 保存到历史记录
                     saveToHistory(userPrompt, finalContent, char.name);
                 },
-                // onError: 出错
-                (error) => {
+                onError: (error) => {
                     updateStreamPreviewError(error.message);
                     showStatus('fmg-status', 'error', '生成失败: ' + error.message);
                 }
-            );
+            });
+            currentAbortController = controller;
+            await promise;
+            if (currentAbortController === controller) currentAbortController = null;
 
         } catch (e) {
             console.error('[开场白生成器] 生成失败:', e);
@@ -4805,146 +4840,6 @@ ${userRequest}
         renderApiProfileSelect();
         document.getElementById('fmg-api-profile-name').value = name;
         showStatus('fmg-api-status', 'success', isNew ? `已新建并启用「${name}」` : `「${name}」已保存并启用`);
-    }
-
-    // ========================================
-    // 流式API调用
-    // ========================================
-
-    async function callAPIStream(prompt, onChunk, onDone, onError) {
-        currentAbortController = new AbortController();
-
-        try {
-            if (settings.apiType === 'openai') {
-                await callOpenAIStream(prompt, onChunk, onDone, currentAbortController.signal);
-            } else {
-                await callGeminiStream(prompt, onChunk, onDone, currentAbortController.signal);
-            }
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                console.log('[开场白生成器] 请求已中断');
-                return;
-            }
-            onError(e);
-        } finally {
-            currentAbortController = null;
-        }
-    }
-
-    async function callOpenAIStream(prompt, onChunk, onDone, signal) {
-        const url = settings.apiUrl.replace(/\/$/, '') + '/chat/completions';
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${settings.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.8,
-                stream: true  // 启用流式
-            }),
-            signal: signal
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API错误: ${response.status} - ${error}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = '';
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-
-            // 处理 SSE 格式数据
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // 保留不完整的行
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const text = json.choices?.[0]?.delta?.content || '';
-                        if (text) {
-                            fullContent += text;
-                            onChunk(fullContent);
-                        }
-                    } catch (e) {
-                        console.warn('[开场白生成器] 解析流数据失败:', trimmed, e);
-                    }
-                }
-            }
-        }
-
-        onDone(fullContent);
-    }
-
-    async function callGeminiStream(prompt, onChunk, onDone, signal) {
-        // Gemini 使用 streamGenerateContent 端点
-        const url = settings.apiUrl.replace(/\/$/, '') + '/models/' + settings.model + ':streamGenerateContent?key=' + settings.apiKey + '&alt=sse';
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.8 }
-            }),
-            signal: signal
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API错误: ${response.status} - ${error}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = '';
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-
-            // 处理 SSE 格式
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                        if (text) {
-                            fullContent += text;
-                            onChunk(fullContent);
-                        }
-                    } catch (e) {
-                        console.warn('[开场白生成器] 解析Gemini流数据失败:', trimmed, e);
-                    }
-                }
-            }
-        }
-
-        onDone(fullContent);
     }
 
     // ========================================
