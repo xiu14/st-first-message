@@ -136,6 +136,7 @@
         console.log('[开场白生成器] 初始化中...');
 
         loadSettings();
+        await loadHistoryStore();
         createUI();
         bindEvents();
 
@@ -173,8 +174,9 @@
 
     function normalizeLoadedSettings() {
         migrateApiProfiles();
-        // 独立的世界书页已移除，它的会话记录不再使用
+        // 独立的世界书页已移除，它的会话记录不再使用；discussionHistory 是更早版本的讨论记录
         delete settings.worldbookSessionHistory;
+        delete settings.discussionHistory;
     }
 
     // ========================================
@@ -260,13 +262,147 @@
         try {
             const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
             if (context && context.extensionSettings) {
-                context.extensionSettings[EXTENSION_NAME] = { ...settings };
+                // 历史文件可用时，讨论会话和开场白历史不再写进 settings.json
+                const { discussSessionHistory, firstMessageHistory, ...rest } = settings;
+                context.extensionSettings[EXTENSION_NAME] = historyFileReady ? rest : { ...settings };
                 if (typeof context.saveSettingsDebounced === 'function') {
                     context.saveSettingsDebounced();
                 }
             }
+            if (historyFileReady) scheduleHistorySave();
         } catch (e) {
             console.error('[开场白生成器] 保存设置失败:', e);
+        }
+    }
+
+    // ========================================
+    // 历史记录文件（data/<用户>/user/files 下）
+    // ========================================
+
+    // settings.json 每次保存都会整个重写，大块的会话记录单独存一个文件
+    const HISTORY_FILE_NAME = 'first-message-generator-history.json';
+    const HISTORY_SAVE_DELAY = 500;
+    // 读取历史文件成功后才写文件；读不到时退回存在 settings 里，避免用不完整的数据覆盖文件
+    let historyFileReady = false;
+    let lastSavedHistoryJson = null;
+    let historySaveTimer = null;
+    let historySaveChain = Promise.resolve();
+
+    function getStRequestHeaders() {
+        const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+        return typeof context?.getRequestHeaders === 'function'
+            ? context.getRequestHeaders()
+            : { 'Content-Type': 'application/json' };
+    }
+
+    function serializeHistory(discussSessionHistory = settings.discussSessionHistory, firstMessageHistory = settings.firstMessageHistory) {
+        return JSON.stringify({
+            version: 1,
+            discussSessionHistory: Array.isArray(discussSessionHistory) ? discussSessionHistory : [],
+            firstMessageHistory: Array.isArray(firstMessageHistory) ? firstMessageHistory : []
+        });
+    }
+
+    function encodeBase64Utf8(text) {
+        const bytes = new TextEncoder().encode(text);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
+    }
+
+    async function readHistoryFile() {
+        const response = await fetch(`/user/files/${HISTORY_FILE_NAME}`, {
+            headers: getStRequestHeaders(),
+            cache: 'no-cache'
+        });
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`读取历史文件失败 (${response.status})`);
+        return await response.json();
+    }
+
+    async function writeHistoryFile(json) {
+        const response = await fetch('/api/files/upload', {
+            method: 'POST',
+            headers: getStRequestHeaders(),
+            body: JSON.stringify({ name: HISTORY_FILE_NAME, data: encodeBase64Utf8(json) })
+        });
+        if (!response.ok) throw new Error(`保存历史文件失败 (${response.status})`);
+    }
+
+    // 同一 id 保留更新时间较新的那条
+    function mergeHistoryRecords(primary, secondary, getTime) {
+        const byId = new Map();
+        [...(primary || []), ...(secondary || [])].forEach(record => {
+            if (!record) return;
+            const existing = byId.get(record.id);
+            if (!existing || getTime(record) > getTime(existing)) byId.set(record.id, record);
+        });
+        return [...byId.values()].sort((a, b) => getTime(b) - getTime(a));
+    }
+
+    // 启动时读取历史文件；第一次运行时把 settings 里的旧记录迁移过去，回读确认后才从 settings 删掉
+    async function loadHistoryStore() {
+        const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+        const storedSettings = context?.extensionSettings?.[EXTENSION_NAME] || {};
+        const hasLegacy = Object.hasOwn(storedSettings, 'discussSessionHistory') || Object.hasOwn(storedSettings, 'firstMessageHistory');
+
+        try {
+            const stored = await readHistoryFile();
+            if (stored) {
+                const storedSessions = Array.isArray(stored.discussSessionHistory) ? stored.discussSessionHistory : [];
+                const storedFirstMessages = Array.isArray(stored.firstMessageHistory) ? stored.firstMessageHistory : [];
+                // settings 里还有旧记录（上次迁移后没来得及清理，或文件曾不可用）时合并，避免丢记录
+                settings.discussSessionHistory = hasLegacy
+                    ? mergeHistoryRecords(storedSessions, settings.discussSessionHistory, record => record.updatedAt || 0)
+                    : storedSessions;
+                settings.firstMessageHistory = hasLegacy
+                    ? mergeHistoryRecords(storedFirstMessages, settings.firstMessageHistory, record => Number(record.id) || 0).slice(0, 5)
+                    : storedFirstMessages;
+                lastSavedHistoryJson = serializeHistory(storedSessions, storedFirstMessages);
+            }
+
+            const json = serializeHistory();
+            if (json !== lastSavedHistoryJson) {
+                await writeHistoryFile(json);
+                const written = await readHistoryFile();
+                if (!written || JSON.stringify(written) !== json) {
+                    throw new Error('历史文件回读内容不一致');
+                }
+                lastSavedHistoryJson = json;
+            }
+
+            historyFileReady = true;
+            if (hasLegacy) {
+                saveSettings();
+                console.log('[开场白生成器] 讨论会话和开场白历史已迁移到', `user/files/${HISTORY_FILE_NAME}`);
+            }
+        } catch (e) {
+            console.warn('[开场白生成器] 历史记录文件不可用，继续存在 settings 里:', e);
+        }
+    }
+
+    function scheduleHistorySave() {
+        clearTimeout(historySaveTimer);
+        historySaveTimer = setTimeout(() => {
+            historySaveChain = historySaveChain.then(saveHistoryNow);
+        }, HISTORY_SAVE_DELAY);
+    }
+
+    async function saveHistoryNow() {
+        if (!historyFileReady) return;
+        const json = serializeHistory();
+        if (json === lastSavedHistoryJson) return;
+        try {
+            await writeHistoryFile(json);
+            lastSavedHistoryJson = json;
+        } catch (e) {
+            // 写不进文件时退回存在 settings 里，至少不丢记录
+            console.error('[开场白生成器] 保存历史记录文件失败，改存到 settings:', e);
+            historyFileReady = false;
+            saveSettings();
+            if (typeof toastr !== 'undefined') toastr.warning('历史记录文件保存失败，已临时改存到设置里');
         }
     }
 
