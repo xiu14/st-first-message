@@ -840,6 +840,82 @@
     white-space: nowrap;
 }
 
+/* 世界书分组（复用 ST-Grouping 的分组数据） */
+.fmg-select-group {
+    margin-bottom: 4px;
+}
+
+.fmg-select-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor, #eee);
+    user-select: none;
+}
+
+.fmg-select-group-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.fmg-select-group-cb {
+    flex-shrink: 0;
+}
+
+.fmg-select-group-arrow {
+    display: inline-block;
+    width: 10px;
+    font-size: 11px;
+    color: var(--SmartThemeQuoteColor, #888);
+    transform: rotate(90deg);
+    transition: transform 0.15s;
+}
+
+.fmg-select-group-name {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fmg-select-group-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--SmartThemeQuoteColor, #888);
+}
+
+.fmg-select-group-body {
+    margin-left: 12px;
+    padding-left: 6px;
+    border-left: 1px solid var(--SmartThemeBorderColor, #444);
+}
+
+.fmg-select-group .fmg-select-group {
+    margin-top: 2px;
+}
+
+.fmg-select-group.fmg-collapsed > .fmg-select-group-body {
+    display: none;
+}
+
+.fmg-select-group.fmg-collapsed > .fmg-select-group-header .fmg-select-group-arrow {
+    transform: none;
+}
+
+/* 搜索时分组全部展开 */
+.fmg-select-body.fmg-searching .fmg-select-group > .fmg-select-group-body {
+    display: block;
+}
+
+.fmg-select-body.fmg-searching .fmg-select-group-arrow {
+    transform: rotate(90deg);
+}
+
 .fmg-select-search {
     padding: 8px 8px 0;
     flex-shrink: 0;

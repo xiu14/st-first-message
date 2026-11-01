@@ -1562,6 +1562,71 @@
         `;
     }
 
+    // 只读复用 ST-Grouping 插件的世界书分组（extensionSettings.worldinfo_groups），没有分组时返回 null
+    function getWorldInfoGroupSections(entries) {
+        const scope = getCurrentWorldInfoSelectionScope();
+        if (!scope.startsWith('world:')) return null;
+
+        const worldName = scope.slice('world:'.length);
+        const extensionSettings = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext()?.extensionSettings : null;
+        const worldbook = extensionSettings?.worldinfo_groups?.worldbooks?.[worldName];
+        const groups = worldbook?.groups;
+        if (!groups || typeof groups !== 'object') return null;
+
+        const orderedIds = (order, map) => [...(Array.isArray(order) ? order : []), ...Object.keys(map)]
+            .filter((id, i, ids) => map[id] && ids.indexOf(id) === i);
+
+        const indexByUid = new Map();
+        entries.forEach((entry, index) => {
+            if (entry.uid !== null) indexByUid.set(Number(entry.uid), index);
+        });
+
+        // 每个条目只放进第一个包含它的分组；组内按世界书原顺序排列
+        const placed = new Set();
+        const take = (uids) => {
+            const indexes = [...new Set((Array.isArray(uids) ? uids : []).map(uid => indexByUid.get(Number(uid))))]
+                .filter(index => index !== undefined && !placed.has(index))
+                .sort((a, b) => a - b);
+            indexes.forEach(index => placed.add(index));
+            return indexes;
+        };
+
+        const sections = orderedIds(worldbook.groupOrder, groups).map(groupId => {
+            const group = groups[groupId];
+            const subgroups = group.subgroups && typeof group.subgroups === 'object' ? group.subgroups : {};
+            return {
+                name: group.name || '分组',
+                indexes: take(group.entries),
+                subgroups: orderedIds(group.subgroupOrder, subgroups)
+                    .map(id => ({ name: subgroups[id].name || '子分组', indexes: take(subgroups[id].entries), subgroups: [] }))
+                    .filter(subgroup => subgroup.indexes.length > 0)
+            };
+        }).filter(section => section.indexes.length > 0 || section.subgroups.length > 0);
+
+        if (sections.length === 0) return null;
+
+        const ungrouped = entries.map((_, index) => index).filter(index => !placed.has(index));
+        if (ungrouped.length > 0) sections.push({ name: '未分组', indexes: ungrouped, subgroups: [] });
+        return sections;
+    }
+
+    function renderSelectionGroup(section, renderItem) {
+        return `
+            <div class="fmg-select-group fmg-collapsed">
+                <div class="fmg-select-group-header">
+                    <input type="checkbox" class="fmg-select-group-cb" title="勾选或取消本组的全部条目">
+                    <span class="fmg-select-group-arrow">▸</span>
+                    <span class="fmg-select-group-name">${escapeHtml(section.name)}</span>
+                    <span class="fmg-select-group-count"></span>
+                </div>
+                <div class="fmg-select-group-body">
+                    ${section.subgroups.map(subgroup => renderSelectionGroup(subgroup, renderItem)).join('')}
+                    ${section.indexes.map(renderItem).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     function openSelectionModal(type) {
         // 移除已存在的弹窗
         const existing = document.getElementById('fmg-selection-modal');
@@ -1581,7 +1646,11 @@
             return;
         }
 
-        const listHtml = entries.map((entry, index) => renderSelectionItem(entry, index, isWorldInfo, savedSelections)).join('');
+        const renderItem = (index) => renderSelectionItem(entries[index], index, isWorldInfo, savedSelections);
+        const groupSections = isWorldInfo ? getWorldInfoGroupSections(entries) : null;
+        const listHtml = groupSections
+            ? groupSections.map(section => renderSelectionGroup(section, renderItem)).join('')
+            : entries.map((_, index) => renderItem(index)).join('');
 
         const modal = document.createElement('div');
         modal.id = 'fmg-selection-modal';
@@ -1614,15 +1683,26 @@
         document.body.appendChild(modal);
 
         const items = Array.from(modal.querySelectorAll('.fmg-select-item'));
-        const visibleCheckboxes = () => items
+        const groupEls = Array.from(modal.querySelectorAll('.fmg-select-group'));
+        // 搜索结果内的条目（折叠的分组里的也算）
+        const visibleCheckboxes = (root = modal) => Array.from(root.querySelectorAll('.fmg-select-item'))
             .filter(item => item.style.display !== 'none')
             .map(item => item.querySelector('.fmg-select-cb'));
 
-        // 更新选中计数
+        // 更新选中计数和分组勾选状态
         const updateSelectInfo = () => {
             const count = modal.querySelectorAll('.fmg-select-cb:checked').length;
             const infoEl = document.getElementById('fmg-select-info');
             if (infoEl) infoEl.textContent = `已选择 ${count} 项`;
+
+            groupEls.forEach(groupEl => {
+                const total = groupEl.querySelectorAll('.fmg-select-cb').length;
+                const checked = groupEl.querySelectorAll('.fmg-select-cb:checked').length;
+                const groupCb = groupEl.querySelector('.fmg-select-group-cb');
+                groupCb.checked = total > 0 && checked === total;
+                groupCb.indeterminate = checked > 0 && checked < total;
+                groupEl.querySelector('.fmg-select-group-count').textContent = `${checked}/${total}`;
+            });
         };
         updateSelectInfo();
 
@@ -1638,8 +1718,25 @@
                 item.style.display = visible ? '' : 'none';
                 if (visible) visibleCount++;
             });
+            // 搜索时展开所有分组，并隐藏没有匹配条目的分组
+            modal.querySelector('.fmg-select-body').classList.toggle('fmg-searching', terms.length > 0);
+            groupEls.forEach(groupEl => {
+                groupEl.style.display = terms.length > 0 && visibleCheckboxes(groupEl).length === 0 ? 'none' : '';
+            });
             modal.querySelector('.fmg-select-empty').style.display = visibleCount === 0 ? '' : 'none';
         };
+
+        groupEls.forEach(groupEl => {
+            const groupCb = groupEl.querySelector('.fmg-select-group-cb');
+            groupCb.onchange = () => {
+                visibleCheckboxes(groupEl).forEach(cb => cb.checked = groupCb.checked);
+                updateSelectInfo();
+            };
+            groupEl.querySelector('.fmg-select-group-header').onclick = (e) => {
+                if (e.target === groupCb) return;
+                groupEl.classList.toggle('fmg-collapsed');
+            };
+        });
 
         modal.querySelector('#fmg-select-all').onclick = () => {
             visibleCheckboxes().forEach(cb => cb.checked = true);
