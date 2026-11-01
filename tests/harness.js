@@ -42,7 +42,15 @@ function loadExtension({ characters = [createCharacter()], characterId = 0, worl
     const w = dom.window;
 
     const calls = { fetch: [], toasts: [], savedWorlds: [], selectCharacterById: [], errors: [] };
+    // savedWorld 是服务器上的世界书；ST 前端另有一份内存缓存
     let savedWorld = null;
+    const worldInfoCache = new Map();
+    let pendingWorldSave = null;
+    const writeWorldToServer = (data) => {
+        if (w.__failWorldSaves) return;
+        savedWorld = JSON.parse(JSON.stringify(data));
+        calls.savedWorlds.push(savedWorld);
+    };
 
     const context = {
         characterId,
@@ -51,10 +59,22 @@ function loadExtension({ characters = [createCharacter()], characterId = 0, worl
         chat: [],
         saveSettingsDebounced() {},
         getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
-        loadWorldInfo: async () => JSON.parse(JSON.stringify(savedWorld || worldData)),
-        saveWorldInfo: async (name, data) => {
-            savedWorld = JSON.parse(JSON.stringify(data));
-            calls.savedWorlds.push(savedWorld);
+        // 与 ST 一致：有缓存就直接返回缓存对象本身
+        loadWorldInfo: async (name) => {
+            if (!worldInfoCache.has(name)) {
+                worldInfoCache.set(name, JSON.parse(JSON.stringify(savedWorld || worldData)));
+            }
+            return worldInfoCache.get(name);
+        },
+        // 与 ST 一致：先更新缓存，默认防抖 1 秒才写盘，immediately 为 true 时立即写盘
+        saveWorldInfo: async (name, data, immediately = false) => {
+            worldInfoCache.set(name, data);
+            clearTimeout(pendingWorldSave);
+            if (immediately) {
+                writeWorldToServer(data);
+                return;
+            }
+            pendingWorldSave = setTimeout(() => writeWorldToServer(data), 1000);
         },
         selectCharacterById: async (id, options) => { calls.selectCharacterById.push([id, options]); },
         getTokenCountAsync: async (text) => String(text).length

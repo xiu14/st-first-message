@@ -19,6 +19,36 @@ test('新建条目不继承已有条目的概率、分组、sticky 等设置', a
     assert.equal(created.uid, 8);
 });
 
+const newEntry = (comment, content) => `{ operation: 'create', uid: null, comment: '${comment}', keys: ['k'], secondary_keys: [], content: '${content}', constant: false, position: 0, insertion_order: 100 }`;
+
+test('连续添加两条，服务器上两条都在（ST 默认防抖写盘时后一条曾覆盖前一条）', async () => {
+    const { fmg, getSavedWorld } = await setup();
+    await fmg(`persistWorldbookEntry(${newEntry('第一条', '一')})`);
+    await fmg(`persistWorldbookEntry(${newEntry('第二条', '二')})`);
+    const comments = Object.values(getSavedWorld().entries).map(e => e.comment);
+    assert.ok(comments.includes('第一条'));
+    assert.ok(comments.includes('第二条'));
+});
+
+test('编辑器里尚未写盘的修改不会被添加条目覆盖', async () => {
+    const { fmg, context, getSavedWorld } = await setup();
+    const data = await context.loadWorldInfo('W');
+    data.entries[7].content = '编辑器里刚改的';
+    await context.saveWorldInfo('W', data);
+    await fmg(`persistWorldbookEntry(${newEntry('新条目', '新')})`);
+    assert.equal(getSavedWorld().entries[7].content, '编辑器里刚改的');
+    assert.equal(getSavedWorld().entries[8].comment, '新条目');
+});
+
+test('服务器没有保存成功时报错，不显示成功', async () => {
+    const { fmg, window } = await setup();
+    window.__failWorldSaves = true;
+    await assert.rejects(
+        () => fmg(`persistWorldbookEntry(${newEntry('新条目', '新')})`),
+        /保存后校验失败/
+    );
+});
+
 test('保存条目后只把它的 uid 加入已选列表', async () => {
     const { fmg } = await setup();
     fmg("setSavedWorldInfoSelections(['uid:5'])");

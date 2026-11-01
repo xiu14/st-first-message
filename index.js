@@ -3615,28 +3615,37 @@ ${editableEntriesText}
 
     let worldbookSaveQueue = Promise.resolve();
 
+    // 以 ST 的内存缓存为准：saveWorldInfo 默认防抖 1 秒才写盘，这段时间里服务器上还是旧数据，
+    // 从服务器读会丢掉刚添加的条目和世界书编辑器里尚未写盘的修改
     async function loadWorldInfoDataForSave(context, worldName) {
+        const data = await context.loadWorldInfo(worldName);
+        return data ? structuredClone(data) : null;
+    }
+
+    // 立即写盘并回读确认；ST 的 _save 不检查响应状态，失败时不会报错
+    async function saveWorldInfoNow(context, worldName, data, expectedEntry) {
+        await context.saveWorldInfo(worldName, data, true);
+
         const headers = typeof context.getRequestHeaders === 'function'
             ? context.getRequestHeaders()
             : { 'Content-Type': 'application/json' };
-
-        try {
-            const response = await fetch('/api/worldinfo/get', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ name: worldName })
-            });
-
-            if (response.ok) {
-                return await response.json();
-            }
-
-            console.warn('[开场白生成器] 保存前刷新世界书失败，改用上下文接口:', response.status);
-        } catch (error) {
-            console.warn('[开场白生成器] 保存前刷新世界书失败，改用上下文接口:', error);
+        const response = await fetch('/api/worldinfo/get', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ name: worldName }),
+            cache: 'no-cache'
+        });
+        if (!response.ok) {
+            throw new Error(`保存后读取世界书失败 (${response.status})，请到世界书页确认是否已保存`);
         }
 
-        return await context.loadWorldInfo(worldName);
+        const savedData = await response.json();
+        const savedEntry = savedData?.entries
+            ? Object.values(savedData.entries).find(entry => Number(entry.uid) === Number(expectedEntry.uid))
+            : null;
+        if (!savedEntry || savedEntry.content !== expectedEntry.content) {
+            throw new Error('保存后校验失败：服务器上的世界书没有这条内容，请重试');
+        }
     }
 
     async function persistWorldbookEntry(entryData) {
@@ -3717,7 +3726,7 @@ ${editableEntriesText}
             ...(loadedData && typeof loadedData === 'object' ? loadedData : {}),
             entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry]))
         };
-        await context.saveWorldInfo(worldName, finalFormat);
+        await saveWorldInfoNow(context, worldName, finalFormat, targetEntry);
         await syncWorldInfoDisplay(worldName, finalFormat);
         if (typeof context.reloadWorldInfoEditor === 'function') {
             context.reloadWorldInfoEditor(worldName, true);
@@ -4152,7 +4161,7 @@ ${designBrief}
                 throw new Error('当前 ST 上下文缺少世界书保存接口');
             }
 
-            const loadedData = await context.loadWorldInfo(worldName);
+            const loadedData = await loadWorldInfoDataForSave(context, worldName);
             const worldEntries = loadedData?.entries ? Object.values(loadedData.entries) : [];
             const newEntry = createWorldbookEntryShell(worldEntries);
 
@@ -4171,8 +4180,11 @@ ${designBrief}
             });
 
             worldEntries.push(newEntry);
-            const finalFormat = { entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry])) };
-            await context.saveWorldInfo(worldName, finalFormat);
+            const finalFormat = {
+                ...(loadedData && typeof loadedData === 'object' ? loadedData : {}),
+                entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry]))
+            };
+            await saveWorldInfoNow(context, worldName, finalFormat, newEntry);
             if (typeof context.reloadWorldInfoEditor === 'function') {
                 context.reloadWorldInfoEditor(worldName, true);
             }
