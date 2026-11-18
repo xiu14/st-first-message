@@ -1274,6 +1274,14 @@
     word-break: break-word;
 }
 
+/* 卡片 HTML 模板里的换行和缩进不能按 pre-wrap 显示成空白；卡片内正文区单独设置了 pre-wrap */
+.fmg-chat-text .fmg-edit-card,
+.fmg-chat-text .fmg-worldbook-card,
+.fmg-chat-text .fmg-first-message-plan-card,
+.fmg-chat-text .fmg-chat-apply-all-bar {
+    white-space: normal;
+}
+
 .fmg-chat-bubble.user .fmg-chat-text {
     background: var(--SmartThemeQuoteColor, rgba(124, 124, 255, 0.25));
     color: var(--SmartThemeBodyColor, #e8e8ff);
@@ -1759,6 +1767,81 @@
     opacity: 0.5;
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.02);
+}
+
+/* 局部修改（PATCH）卡片 */
+.fmg-edit-card.invalid {
+    border-color: rgba(255, 100, 100, 0.28);
+    background: rgba(255, 100, 100, 0.04);
+}
+
+.fmg-patch-hunks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+}
+
+.fmg-patch-hunk {
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.fmg-patch-old,
+.fmg-patch-new {
+    padding: 6px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.fmg-patch-old {
+    color: #aaa;
+    background: rgba(255, 100, 100, 0.06);
+    border-left: 3px solid rgba(255, 110, 110, 0.5);
+}
+
+.fmg-patch-new {
+    color: var(--SmartThemeBodyColor, #ddd);
+    background: rgba(100, 255, 150, 0.05);
+    border-left: 3px solid rgba(100, 255, 150, 0.5);
+}
+
+.fmg-patch-mark-del {
+    color: #ff9a9a;
+    background: rgba(255, 100, 100, 0.2);
+    text-decoration: line-through;
+    border-radius: 2px;
+}
+
+.fmg-patch-mark-ins {
+    color: #8dffb4;
+    background: rgba(100, 255, 150, 0.18);
+    border-radius: 2px;
+}
+
+.fmg-patch-empty {
+    color: #888;
+    font-style: italic;
+}
+
+.fmg-patch-note {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #888;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fmg-patch-note.warning {
+    color: #ffb070;
+}
+
+.fmg-patch-card .fmg-edit-card-old {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: none;
 }
 
 .fmg-first-message-plan-card {

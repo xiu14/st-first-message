@@ -953,7 +953,7 @@
             if (!editData) return;
             el.disabled = true;
             el.textContent = '⏳ 应用中...';
-            applyCharacterEdit(editData.field, editData.content, el);
+            applyCharacterEdit(editData.field, editData.content, el, { patches: editData.patches });
         }],
         ['.fmg-chat-apply-all', (el) => applyAllDiscussCards(el)],
         ['.fmg-worldbook-apply', (el) => {
@@ -2519,8 +2519,38 @@
 重要规则：
 1. 只有在用户明确要求修改时才使用此格式
 2. 普通讨论时不要使用此格式
-3. [EDIT:xxx] 块内应包含该字段修改后的完整内容，而不是差异或补丁
+3. [EDIT:xxx] 块内应包含该字段修改后的完整内容；只改其中一部分时改用下面的 [PATCH] 局部修改格式，不要整篇重写
 4. 可以在 [EDIT] 块前后添加普通文字解释你的修改理由`);
+
+        parts.push(`【局部修改格式说明（只改一部分时优先使用）】
+只改角色卡字段或已有世界书条目正文的一部分（改几句话、改一段、删一句、加一段）时，用 [PATCH] 只输出要改的地方，插件会在原文中找到这段文字并替换：
+[PATCH:目标]
+<<<<<<< SEARCH
+要被替换的原文（从当前内容中逐字复制）
+=======
+替换后的新文本
+>>>>>>> REPLACE
+[/PATCH]
+
+示例（改描述里的一句话）：
+[PATCH:description]
+<<<<<<< SEARCH
+她总是独来独往，不愿与人交谈。
+=======
+她习惯独来独往，但对熟人会意外地话多。
+>>>>>>> REPLACE
+[/PATCH]
+
+局部修改规则：
+1. 目标写角色卡字段名（如 description、personality、first_mes、alternate_greetings），或写 wi:UID 指定已选世界书条目的正文（如 [PATCH:wi:12]，UID 见下方已选条目清单）。
+2. SEARCH 必须从当前内容中逐字复制，包括标点和换行，不要改写、缩写或省略；它在目标内容中只能出现一次，不够唯一时多带一两句上下文。
+3. SEARCH 尽量短，只包含要改的句子和必要的上下文，不要大段复制。
+4. 一个 [PATCH] 块里可以有多组 SEARCH/REPLACE，按原文顺序排列，彼此不要重叠。
+5. 删除内容时 REPLACE 部分留空；新增内容时用相邻的一句原文作 SEARCH，在 REPLACE 中保留这句并接上新内容。
+6. 可选开场白直接写 [PATCH:alternate_greetings]，插件会在所有可选开场白中定位；SEARCH 不要带 [1] 这样的序号。
+7. 只适用于文本内容；tags 这类数组或对象字段、世界书条目的关键词和触发设置，仍用 [EDIT] 或 [WORLDBOOK_ENTRY]。
+8. 改动超过原文一半或需要整体重写时，改用 [EDIT] 或 [WORLDBOOK_ENTRY] 输出完整内容。
+9. 只有在用户明确要求修改时才使用此格式。`);
 
         parts.push(`【开场白生成规划格式说明】
 当用户明确要求“生成开场白”“给我写开场白”“最后帮我出一个开场白”“按刚才修改后的设定生成开场白”等需求时，不要直接输出最终开场白。你应该先给出一个简短大纲，让用户确认后再由工具调用生成页完成正式生成。
@@ -2568,13 +2598,13 @@ ${editableEntriesText}
 
 世界书规则：
 1. 新建条目时 operation 必须是 "create"，不要填写 uid。
-2. 更新已有条目时 operation 必须是 "update"，并填写当前已选条目清单中对应的 uid。更新时插入位置、深度、role 和顺序会自动沿用清单中原条目的设置（用户自己设置的，不要改动），可以省略 position、depth、role、insertion_order 和 placement_reason。
+2. 更新已有条目时 operation 必须是 "update"，并填写当前已选条目清单中对应的 uid。更新时插入位置、深度、role 和顺序会自动沿用清单中原条目的设置（用户自己设置的，不要改动），可以省略 position、depth、role、insertion_order 和 placement_reason。更新时没写的字段（content、keys、secondary_keys、comment、constant 等）都保持原值，只写要改的字段即可，例如只改关键词时不用再输出 content；只改正文的一部分时用 [PATCH:wi:UID]。
 3. 新建条目时由你根据内容决定 position、depth、role 和 insertion_order，并参考清单中已有条目的位置和顺序安排先后，同时给出 placement_reason。
 4. 常驻条目 constant=true 时 keys 应为空数组；非常驻条目 keys 至少有一个主关键词。
 5. position 可用值：before_char, after_char, before_author_note, after_author_note, before_example_messages, after_example_messages, at_depth, outlet。
 6. position 为 at_depth 时必须提供 depth 和 role，role 只能是 system、user、assistant。
 7. position 为 outlet 时必须提供 outlet_name。
-8. content 必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
+8. 写了 content 时，它必须是完整可直接使用的最终条目内容，不要写“同上”“略”或备注占位符。
 9. 条目块内部必须是严格 JSON，必须能被 JSON.parse 直接解析：
    - 字符串值必须使用英文双引号包裹
    - 字符串内部需要换行时写成 \\n，不要直接在字符串中换行
@@ -2833,6 +2863,161 @@ ${editableEntriesText}
         return plans;
     }
 
+    // ========================================
+    // 局部修改（PATCH）：AI 只给出“原文 → 新文”，在本地定位替换
+    // ========================================
+
+    const PATCH_WORLDBOOK_TARGET = /^(?:wi|worldbook|world_info|worldinfo|uid)[:：](\d+)$/i;
+
+    function parsePatchHunks(body) {
+        const lines = String(body || '').replace(/\r\n?/g, '\n').split('\n');
+        const hunks = [];
+        let state = 'idle';
+        let find = [];
+        let replace = [];
+
+        for (const line of lines) {
+            const marker = line.trim();
+            if (/^<{5,}\s*(?:SEARCH|FIND|原文)?$/i.test(marker)) {
+                if (state !== 'idle') throw new Error('替换块缺少结束标记 >>>>>>> REPLACE');
+                state = 'find';
+                find = [];
+                replace = [];
+            } else if (state === 'find' && /^={5,}$/.test(marker)) {
+                state = 'replace';
+            } else if (state === 'replace' && /^>{5,}\s*(?:REPLACE|新文)?$/i.test(marker)) {
+                hunks.push({ find: find.join('\n'), replace: replace.join('\n') });
+                state = 'idle';
+            } else if (state === 'find') {
+                find.push(line);
+            } else if (state === 'replace') {
+                replace.push(line);
+            }
+        }
+
+        if (state !== 'idle') throw new Error('替换块不完整，缺少 ======= 或 >>>>>>> REPLACE');
+        if (hunks.length === 0) throw new Error('没有找到 <<<<<<< SEARCH / ======= / >>>>>>> REPLACE 替换块');
+        if (hunks.some(hunk => !hunk.find.trim())) throw new Error('SEARCH 部分为空，无法定位要修改的原文');
+        return hunks;
+    }
+
+    function parsePatchBlocks(text) {
+        const regex = /\[PATCH:([^\]\s]+)\]([\s\S]*?)\[\/PATCH\]/g;
+        const patches = [];
+        let match;
+
+        while ((match = regex.exec(text)) !== null) {
+            const target = match[1].trim();
+            const base = { target, start: match.index, end: regex.lastIndex };
+            try {
+                const hunks = parsePatchHunks(match[2]);
+                const worldbookMatch = target.match(PATCH_WORLDBOOK_TARGET);
+                if (worldbookMatch) {
+                    patches.push({ ...base, kind: 'worldbook', uid: Number(worldbookMatch[1]), hunks });
+                    continue;
+                }
+
+                const field = normalizeEditFieldName(target).replace(/\.\d+$/, '');
+                if (!field) throw new Error(`无法识别的修改目标：${target}`);
+                patches.push({ ...base, kind: 'character', field, hunks });
+            } catch (error) {
+                patches.push({ ...base, invalid: true, raw: match[2].trim(), error: error.message });
+            }
+        }
+
+        return patches;
+    }
+
+    // 模糊匹配时忽略空白，并把全角/中英文标点统一，map 记录每个字符在原文中的位置
+    const PATCH_CHAR_MAP = {
+        '，': ',', '。': '.', '：': ':', '；': ';', '！': '!', '？': '?', '、': ',',
+        '（': '(', '）': ')', '【': '[', '】': ']', '《': '<', '》': '>',
+        '“': '"', '”': '"', '„': '"', '「': '"', '」': '"', '『': '"', '』': '"',
+        '‘': "'", '’': "'", '…': '...', '—': '-', '–': '-', '～': '~', '·': '.'
+    };
+
+    function normalizeForPatch(text) {
+        const chars = [];
+        const map = [];
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (/\s/.test(ch)) continue;
+            let out = PATCH_CHAR_MAP[ch];
+            if (out === undefined) {
+                const code = ch.charCodeAt(0);
+                out = code >= 0xFF01 && code <= 0xFF5E ? String.fromCharCode(code - 0xFEE0) : ch;
+            }
+            for (const c of out) {
+                chars.push(c);
+                map.push(i);
+            }
+        }
+        return { text: chars.join(''), map };
+    }
+
+    function findAllIndexes(haystack, needle) {
+        const indexes = [];
+        if (!needle) return indexes;
+        let index = haystack.indexOf(needle);
+        while (index !== -1) {
+            indexes.push(index);
+            index = haystack.indexOf(needle, index + 1);
+        }
+        return indexes;
+    }
+
+    function findPatchMatches(text, find, fuzzy) {
+        if (!fuzzy) {
+            return findAllIndexes(text, find).map(start => ({ start, end: start + find.length, fuzzy: false }));
+        }
+        const normText = normalizeForPatch(text);
+        const normFind = normalizeForPatch(find).text;
+        return findAllIndexes(normText.text, normFind).map(start => ({
+            start: normText.map[start],
+            end: normText.map[start + normFind.length - 1] + 1,
+            fuzzy: true
+        }));
+    }
+
+    // 先精确匹配，找不到再模糊匹配；必须恰好命中一处
+    function locatePatchHunk(texts, find) {
+        for (const fuzzy of [false, true]) {
+            const matches = texts.flatMap((text, index) => findPatchMatches(text, find, fuzzy).map(match => ({ ...match, index })));
+            if (matches.length === 1) return matches[0];
+            if (matches.length > 1) {
+                throw new Error(`这段原文出现了 ${matches.length} 处，无法确定改哪一处，请让 AI 多引用一点上下文`);
+            }
+        }
+        throw new Error('找不到这段原文：内容可能已经改过，或 AI 引用得不准确');
+    }
+
+    /**
+     * 把替换块依次应用到文本（或字符串数组，如可选开场白）上，返回新值，不修改传入的值。
+     * 任一处定位失败都会抛错，不会只改一半。
+     */
+    function applyPatchHunks(value, hunks) {
+        const isArray = Array.isArray(value);
+        if ((isArray && value.some(item => typeof item !== 'string'))
+            || (!isArray && value !== undefined && value !== null && typeof value !== 'string')) {
+            throw new Error('只能局部修改文本内容，这个字段请用整段修改');
+        }
+
+        const texts = isArray ? [...value] : [String(value ?? '')];
+        hunks.forEach((hunk, i) => {
+            let match;
+            try {
+                match = locatePatchHunk(texts, hunk.find);
+            } catch (error) {
+                throw new Error(hunks.length > 1 ? `第 ${i + 1} 处修改：${error.message}` : error.message);
+            }
+            // 模糊匹配的范围不含首尾空白，替换文本也去掉首尾空白，保留原文的换行和缩进
+            const replacement = match.fuzzy ? hunk.replace.trim() : hunk.replace;
+            const text = texts[match.index];
+            texts[match.index] = text.slice(0, match.start) + replacement + text.slice(match.end);
+        });
+        return isArray ? texts : texts[0];
+    }
+
     function buildFirstMessageRequestFromPlan(plan) {
         const parts = [];
         if (plan.request) parts.push(plan.request);
@@ -2935,7 +3120,8 @@ ${editableEntriesText}
         const blocks = [
             ...parseEditBlocks(content).map(edit => ({ type: 'edit', start: edit.start, end: edit.end, data: edit })),
             ...parseFirstMessagePlanBlocks(content).map(plan => ({ type: 'first-message-plan', start: plan.start, end: plan.end, data: plan })),
-            ...parseWorldbookEntryBlocks(content).map(entry => ({ type: 'worldbook', start: entry.start, end: entry.end, data: entry }))
+            ...parseWorldbookEntryBlocks(content).map(entry => ({ type: 'worldbook', start: entry.start, end: entry.end, data: entry })),
+            ...parsePatchBlocks(content).map(patch => ({ type: 'patch', start: patch.start, end: patch.end, data: patch }))
         ].sort((a, b) => a.start - b.start || a.end - b.end);
 
         if (blocks.length === 0) {
@@ -2965,7 +3151,7 @@ ${editableEntriesText}
                 const editKey = 'edit_' + (++_editIdCounter);
                 window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
                 editCount++;
-                html += renderEditCard(edit, editKey, cardIndex);
+                html += renderEditCard(edit, editKey, cardIndex).trim();
             } else if (block.type === 'first-message-plan') {
                 const plan = block.data;
                 const planKey = 'first_message_plan_' + (++_firstMessagePlanIdCounter);
@@ -2978,7 +3164,30 @@ ${editableEntriesText}
                         notes: plan.notes
                     };
                 }
-                html += renderFirstMessagePlanCard(plan, planKey, cardIndex);
+                html += renderFirstMessagePlanCard(plan, planKey, cardIndex).trim();
+            } else if (block.type === 'patch') {
+                const patch = block.data;
+                if (patch.invalid) {
+                    html += renderInvalidPatchCard(patch).trim();
+                } else if (patch.kind === 'worldbook') {
+                    const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
+                    const existing = findLoadedWorldEntry(patch.uid);
+                    // 只带 uid 和替换块，其余字段为空表示沿用原条目
+                    window._fmgPendingWorldbookEntries[entryKey] = {
+                        operation: 'update',
+                        uid: patch.uid,
+                        patches: patch.hunks,
+                        keep_placement: true,
+                        label: existing?.comment || `#${patch.uid}`
+                    };
+                    worldbookCount++;
+                    html += renderPatchCard(patch, { key: entryKey, cardIndex, existing }).trim();
+                } else {
+                    const editKey = 'edit_' + (++_editIdCounter);
+                    window._fmgPendingEdits[editKey] = { field: patch.field, patches: patch.hunks };
+                    editCount++;
+                    html += renderPatchCard(patch, { key: editKey, cardIndex }).trim();
+                }
             } else {
                 const entry = block.data;
                 const entryKey = 'worldbook_' + (++_worldbookEntryIdCounter);
@@ -2992,7 +3201,8 @@ ${editableEntriesText}
                         secondary_keys: entry.secondary_keys,
                         content: entry.content,
                         constant: entry.constant,
-                        vectorized: false,
+                        // 更新时沿用原条目的向量化设置
+                        vectorized: entry.operation === 'update' ? null : false,
                         selective: entry.selective,
                         position: entry.position,
                         depth: entry.depth,
@@ -3004,7 +3214,7 @@ ${editableEntriesText}
                         keep_placement: entry.keep_placement === true
                     };
                 }
-                html += renderWorldbookEntryCard(entry, entryKey, cardIndex);
+                html += renderWorldbookEntryCard(entry, entryKey, cardIndex).trim();
             }
             lastIndex = block.end;
         }
@@ -3017,7 +3227,7 @@ ${editableEntriesText}
         }
 
         if (editCount + worldbookCount >= 2) {
-            html += renderApplyAllBar(editCount, worldbookCount);
+            html += renderApplyAllBar(editCount, worldbookCount).trim();
         }
         return html;
     }
@@ -3117,7 +3327,7 @@ ${editableEntriesText}
                 if (!editData) continue;
                 cardBtn.disabled = true;
                 cardBtn.textContent = '⏳ 应用中...';
-                const ok = await applyCharacterEdit(editData.field, editData.content, cardBtn, { silent: true });
+                const ok = await applyCharacterEdit(editData.field, editData.content, cardBtn, { silent: true, patches: editData.patches });
                 if (ok) {
                     editApplied++;
                 } else {
@@ -3135,7 +3345,7 @@ ${editableEntriesText}
                     worldbookApplied++;
                 } catch (error) {
                     console.error('[开场白生成器] 批量添加世界书条目失败:', error);
-                    failures.push(`${entryData.comment || '未命名条目'}（${error.message}）`);
+                    failures.push(`${entryData.label || entryData.comment || '未命名条目'}（${error.message}）`);
                     cardBtn.textContent = '⚠️ 重试';
                     cardBtn.disabled = false;
                 }
@@ -3186,6 +3396,111 @@ ${editableEntriesText}
         `;
     }
 
+    function findLoadedWorldEntry(uid) {
+        return (window._fmgWorldEntries || []).find(item => Number(item.uid) === Number(uid)) || null;
+    }
+
+    // 去掉新旧文本相同的开头和结尾，只高亮中间真正改动的部分
+    function renderPatchDiffPair(oldText, newText) {
+        const max = Math.min(oldText.length, newText.length);
+        let prefix = 0;
+        while (prefix < max && oldText[prefix] === newText[prefix]) prefix++;
+        // 不把代理对（emoji 等）拆开
+        if (prefix > 0 && /[\uD800-\uDBFF]/.test(oldText[prefix - 1])) prefix--;
+        let suffix = 0;
+        while (suffix < max - prefix && oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]) suffix++;
+        if (suffix > 0 && /[\uDC00-\uDFFF]/.test(oldText[oldText.length - suffix])) suffix--;
+
+        const render = (text, markClass) => {
+            const middle = text.slice(prefix, text.length - suffix);
+            return escapeHtml(text.slice(0, prefix))
+                + (middle ? `<span class="${markClass}">${escapeHtml(middle)}</span>` : '')
+                + escapeHtml(text.slice(text.length - suffix));
+        };
+        return {
+            oldHtml: render(oldText, 'fmg-patch-mark-del'),
+            newHtml: newText ? render(newText, 'fmg-patch-mark-ins') : '<span class="fmg-patch-empty">（删除这段）</span>'
+        };
+    }
+
+    function formatPatchedValue(value) {
+        if (Array.isArray(value)) return value.map((item, index) => `[${index + 1}] ${item}`).join('\n\n');
+        return formatEditFieldValue(value);
+    }
+
+    function renderInvalidPatchCard(patch) {
+        return `
+            <div class="fmg-edit-card fmg-patch-card invalid">
+                <div class="fmg-edit-card-header">⚠️ 局部修改解析失败（${escapeHtml(patch.target)}）</div>
+                <div class="fmg-worldbook-meta">
+                    <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">原因</span><span>${escapeHtml(patch.error || '未知错误')}</span></div>
+                </div>
+                <div class="fmg-edit-card-new">
+                    <div class="fmg-edit-card-label-static">原始内容</div>
+                    <div class="fmg-edit-card-new-content">${escapeHtml(patch.raw || '')}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPatchCard(patch, { key, cardIndex, existing = null }) {
+        const isWorldbook = patch.kind === 'worldbook';
+        let currentValue;
+        let title;
+        if (isWorldbook) {
+            currentValue = existing ? existing.content : undefined;
+            title = `✂️ 局部修改世界书：#${patch.uid}${existing ? ` ${existing.comment || existing.name || ''}` : ''}`;
+        } else {
+            currentValue = window._fmgCharData ? getCharacterDataFieldValue(patch.field) : undefined;
+            title = `✂️ 局部修改：${getEditFieldLabel(patch.field)} (${patch.field})`;
+        }
+
+        // 按当前内容预览；真正应用时会按写入前的最新内容重新定位
+        let previewHtml = '';
+        if (currentValue === undefined) {
+            previewHtml = `<div class="fmg-patch-note">${isWorldbook ? '这个条目不在已选条目里' : '没有读取到这个字段'}，应用时会按最新内容定位</div>`;
+        } else {
+            try {
+                const patched = applyPatchHunks(currentValue, patch.hunks);
+                previewHtml = `
+                    <div class="fmg-edit-card-old">
+                        <div class="fmg-edit-card-label">📄 修改后全文 <span class="fmg-collapse-arrow">▶</span></div>
+                        <div class="fmg-edit-card-old-content">${escapeHtml(formatPatchedValue(patched))}</div>
+                    </div>
+                `;
+            } catch (error) {
+                previewHtml = `<div class="fmg-patch-note warning">⚠️ ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        const hunksHtml = patch.hunks.map(hunk => {
+            const { oldHtml, newHtml } = renderPatchDiffPair(hunk.find, hunk.replace);
+            return `
+                <div class="fmg-patch-hunk">
+                    <div class="fmg-patch-old">${oldHtml}</div>
+                    <div class="fmg-patch-new">${newHtml}</div>
+                </div>
+            `;
+        }).join('');
+
+        const cardClass = isWorldbook ? 'fmg-worldbook-card' : 'fmg-edit-card';
+        const keyAttr = isWorldbook ? 'data-entry-key' : 'data-edit-key';
+        const applyClass = isWorldbook ? 'fmg-worldbook-apply' : 'fmg-edit-apply';
+        const ignoreClass = isWorldbook ? 'fmg-worldbook-ignore' : 'fmg-edit-ignore';
+
+        return `
+            <div class="${cardClass} fmg-patch-card" ${keyAttr}="${key}" data-card-index="${cardIndex}">
+                <div class="${isWorldbook ? 'fmg-worldbook-card-header' : 'fmg-edit-card-header'}">${escapeHtml(title)}</div>
+                <div class="fmg-patch-hunks">${hunksHtml}</div>
+                ${previewHtml}
+                <div class="fmg-edit-card-actions">
+                    <button class="fmg-btn fmg-btn-primary ${applyClass}" ${keyAttr}="${key}">${isWorldbook ? '✅ 更新世界书条目' : '✅ 应用'}</button>
+                    <button class="fmg-btn fmg-btn-secondary ${ignoreClass}" ${keyAttr}="${key}">❌ 忽略</button>
+                </div>
+            </div>
+        `;
+    }
+
     // 写入前确认 ST 当前角色仍是插件读取数据时的那个角色，防止把修改写到别的角色上
     function getCurrentCharacterForWrite(context) {
         if (context.characterId === undefined) throw new Error('未选择角色');
@@ -3213,7 +3528,8 @@ ${editableEntriesText}
     }
 
     // silent: 批量应用时由调用方统一刷新面板和提示；返回是否成功
-    async function applyCharacterEdit(field, newValue, buttonEl, { silent = false } = {}) {
+    // patches: 局部修改的替换块，按写入前的最新字段值定位替换，此时忽略 newValue
+    async function applyCharacterEdit(field, newValue, buttonEl, { silent = false, patches = null } = {}) {
         try {
             const context = SillyTavern.getContext();
             const char = getCurrentCharacterForWrite(context);
@@ -3222,8 +3538,11 @@ ${editableEntriesText}
             const dataPath = normalizeEditFieldName(field);
             if (!dataPath) throw new Error('字段名无效');
 
-            const currentValue = getNestedValue(char.data, dataPath);
-            const parsedValue = parseEditFieldValue(dataPath, newValue, currentValue);
+            const currentValue = getNestedValue(char.data, dataPath)
+                ?? (TOP_LEVEL_CHARACTER_FIELDS[dataPath] ? char[TOP_LEVEL_CHARACTER_FIELDS[dataPath]] : undefined);
+            const parsedValue = patches
+                ? applyPatchHunks(currentValue, patches)
+                : parseEditFieldValue(dataPath, newValue, currentValue);
 
             // 调用 SillyTavern API 保存，成功后再更新内存，避免保存失败时内存与服务器不一致
             const headers = typeof context.getRequestHeaders === 'function'
@@ -3644,27 +3963,45 @@ ${editableEntriesText}
                 const keys = normalizeStringArray(parsed.keys ?? parsed.key);
                 const secondaryKeys = normalizeStringArray(parsed.secondary_keys ?? parsed.keysecondary ?? parsed.secondaryKeys);
 
-                if (!content) {
-                    throw new Error('缺少 content 字段');
-                }
-
                 const operation = normalizeWorldbookOperation(
                     parsed.operation ?? parsed.action ?? parsed.mode ?? (parsed.update === true ? 'update' : 'create')
                 );
+                const isUpdate = operation === 'update';
                 const parsedUid = Number.isFinite(Number(parsed.uid)) ? Number(parsed.uid) : null;
-                if (operation === 'update' && parsedUid === null) {
+                if (isUpdate && parsedUid === null) {
                     throw new Error('operation 为 update 时必须提供 uid');
+                }
+
+                // 更新时没写的字段为 null，保存时沿用原条目的值
+                const has = (...names) => names.some(name => parsed[name] !== undefined && parsed[name] !== null);
+                const keepIfMissing = (provided, value) => (isUpdate && !provided ? null : value);
+
+                if (!content && !isUpdate) {
+                    throw new Error('缺少 content 字段');
+                }
+
+                const fields = {
+                    comment: keepIfMissing(has('comment', 'title', 'name'), String(parsed.comment || parsed.title || parsed.name || keys[0] || '未命名条目').trim()),
+                    keys: keepIfMissing(has('keys', 'key'), keys),
+                    secondary_keys: keepIfMissing(has('secondary_keys', 'keysecondary', 'secondaryKeys'), secondaryKeys),
+                    content: content || null,
+                    constant: keepIfMissing(has('constant'), parsed.constant === true),
+                    selective: keepIfMissing(has('selective'), parsed.selective !== undefined ? Boolean(parsed.selective) : parsed.constant !== true),
+                    enabled: keepIfMissing(has('enabled'), parsed.enabled !== false)
+                };
+                if (isUpdate && Object.values(fields).every(value => value === null)) {
+                    throw new Error('更新条目时没有写任何要修改的字段');
                 }
 
                 entries.push({
                     operation,
-                    uid: operation === 'update' ? parsedUid : null,
-                    comment: String(parsed.comment || parsed.title || parsed.name || keys[0] || '未命名条目').trim(),
-                    keys: keys,
-                    secondary_keys: secondaryKeys,
-                    content: content,
-                    constant: parsed.constant === true,
-                    selective: parsed.selective !== undefined ? Boolean(parsed.selective) : parsed.constant !== true,
+                    uid: isUpdate ? parsedUid : null,
+                    comment: fields.comment,
+                    keys: fields.keys,
+                    secondary_keys: fields.secondary_keys,
+                    content: fields.content,
+                    constant: fields.constant,
+                    selective: fields.selective,
                     position: normalizeWorldbookPosition(parsed.position),
                     depth: Number.isFinite(Number(parsed.depth)) ? Number(parsed.depth) : null,
                     role: normalizeWorldbookRole(parsed.role),
@@ -3673,7 +4010,7 @@ ${editableEntriesText}
                     insertion_order: Number.isFinite(Number(parsed.insertion_order ?? parsed.order))
                         ? Number(parsed.insertion_order ?? parsed.order)
                         : 100,
-                    enabled: parsed.enabled !== false,
+                    enabled: fields.enabled,
                     start: match.index,
                     end: regex.lastIndex
                 });
@@ -3724,9 +4061,19 @@ ${editableEntriesText}
             `;
         }
 
-        const triggerMode = entry.constant ? '常驻条目' : '关键词触发';
-        const keysText = entry.keys.length > 0 ? entry.keys.join(', ') : '（无）';
-        const secondaryText = entry.secondary_keys.length > 0 ? entry.secondary_keys.join(', ') : '（无）';
+        // 更新时没写的字段（null）显示原条目的值并标注沿用
+        const existing = entry.uid !== null ? findLoadedWorldEntry(entry.uid) : null;
+        const keptText = (value) => (existing ? `${value}（沿用）` : '沿用原设置');
+        const listText = (list) => (list.length > 0 ? list.join(', ') : '（无）');
+        const effectiveConstant = entry.constant ?? existing?.constant ?? false;
+        const triggerLabel = effectiveConstant ? '常驻条目' : '关键词触发';
+        const triggerMode = entry.constant === null ? keptText(triggerLabel) : triggerLabel;
+        const keysText = entry.keys === null ? keptText(listText(existing?.key || [])) : listText(entry.keys);
+        const secondaryText = entry.secondary_keys === null
+            ? keptText(listText(existing?.keysecondary || []))
+            : listText(entry.secondary_keys);
+        const contentText = entry.content === null ? '（沿用原内容，不修改）' : entry.content;
+        const titleText = entry.comment || existing?.comment || (entry.uid !== null ? `#${entry.uid}` : '未命名条目');
         const modeLabel = entry.uid !== null ? `更新现有条目 #${entry.uid}（沿用原位置/深度/顺序）` : '新增条目';
         const hasPosition = entry.position !== null && entry.position !== undefined;
         const hasOrder = Number.isFinite(Number(entry.insertion_order)) && entry.insertion_order !== null;
@@ -3747,7 +4094,7 @@ ${editableEntriesText}
 
         return `
             <div class="fmg-worldbook-card" data-entry-key="${entryKey}" data-card-index="${cardIndex}">
-                <div class="fmg-worldbook-card-header">📚 世界书条目建议：${escapeHtml(entry.comment || '未命名条目')}</div>
+                <div class="fmg-worldbook-card-header">📚 世界书条目建议：${escapeHtml(titleText)}</div>
                 <div class="fmg-worldbook-meta">
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">操作类型</span><span>${escapeHtml(modeLabel)}</span></div>
                     <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">主关键词</span><span>${escapeHtml(keysText)}</span></div>
@@ -3760,18 +4107,18 @@ ${editableEntriesText}
                 </div>
                 <div class="fmg-edit-card-new">
                     <div class="fmg-edit-card-label-static">📝 条目内容</div>
-                    <div class="fmg-edit-card-new-content">${escapeHtml(entry.content)}</div>
+                    <div class="fmg-edit-card-new-content">${escapeHtml(contentText)}</div>
                 </div>
                 <div class="fmg-worldbook-controls">
                     <div class="fmg-worldbook-control-row">
                         <span class="fmg-worldbook-control-label">状态</span>
                         <div class="fmg-worldbook-state-group">
                             <label class="fmg-worldbook-state-chip blue">
-                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="constant" ${entry.constant ? 'checked' : ''}>
+                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="constant" ${effectiveConstant ? 'checked' : ''}>
                                 <span>蓝灯</span>
                             </label>
                             <label class="fmg-worldbook-state-chip green">
-                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="normal" ${entry.constant ? '' : 'checked'}>
+                                <input class="fmg-worldbook-state-input" type="checkbox" data-entry-key="${entryKey}" data-state="normal" ${effectiveConstant ? '' : 'checked'}>
                                 <span>绿灯</span>
                             </label>
                         </div>
@@ -3895,9 +4242,6 @@ ${editableEntriesText}
         const char = getCurrentCharacterForWrite(context);
         const worldName = char?.data?.extensions?.world;
         if (!worldName) throw new Error('角色未关联外部世界书，请先在角色卡中关联世界书');
-        if (!entryData.constant && (!entryData.keys || entryData.keys.length === 0)) {
-            throw new Error('非常驻条目至少需要一个主关键词');
-        }
         if (typeof context.loadWorldInfo !== 'function' || typeof context.saveWorldInfo !== 'function') {
             throw new Error('当前 ST 上下文缺少世界书保存接口');
         }
@@ -3926,16 +4270,27 @@ ${editableEntriesText}
             worldEntries.push(targetEntry);
         }
 
+        // 更新时没给的字段（null/undefined）沿用原条目；局部修改按写入前的最新正文定位替换
+        if (entryData.patches && !isUpdate) throw new Error('局部修改只能用于已有条目');
+        const content = entryData.patches
+            ? applyPatchHunks(String(targetEntry.content ?? ''), entryData.patches)
+            : (entryData.content ?? targetEntry.content ?? '');
+        const keys = entryData.keys ?? targetEntry.key ?? [];
+        const constant = (entryData.constant ?? targetEntry.constant) === true;
+        if (!constant && keys.length === 0) {
+            throw new Error('非常驻条目至少需要一个主关键词');
+        }
+        const comment = entryData.comment ?? targetEntry.comment ?? '';
         const resolvedPosition = entryData.position ?? targetEntry.position ?? WORLDBOOK_POSITIONS.before;
 
         Object.assign(targetEntry, {
-            key: entryData.keys || [],
-            keysecondary: entryData.secondary_keys || [],
-            comment: entryData.comment || '',
-            content: entryData.content || '',
-            constant: entryData.constant === true,
-            vectorized: entryData.vectorized === true,
-            selective: entryData.constant === true ? false : entryData.selective !== false,
+            key: keys,
+            keysecondary: entryData.secondary_keys ?? targetEntry.keysecondary ?? [],
+            comment,
+            content,
+            constant,
+            vectorized: (entryData.vectorized ?? targetEntry.vectorized) === true,
+            selective: constant ? false : (entryData.selective ?? targetEntry.selective) !== false,
             order: entryData.insertion_order ?? targetEntry.order ?? 100,
             position: resolvedPosition,
             depth: resolvedPosition === WORLDBOOK_POSITIONS.atDepth
@@ -3947,8 +4302,10 @@ ${editableEntriesText}
             outletName: resolvedPosition === WORLDBOOK_POSITIONS.outlet
                 ? (entryData.outlet_name || targetEntry.outletName || '')
                 : '',
-            disable: entryData.enabled === false,
-            addMemo: !!entryData.comment
+            disable: entryData.enabled === null || entryData.enabled === undefined
+                ? targetEntry.disable === true
+                : entryData.enabled === false,
+            addMemo: !!comment
         });
 
         if (targetEntry.position === WORLDBOOK_POSITIONS.outlet && !targetEntry.outletName) {
@@ -3991,7 +4348,7 @@ ${editableEntriesText}
                 setCardState(buttonEl.closest('.fmg-worldbook-card'), result.isUpdate ? 'updated' : 'added');
             }
 
-            showStatus(statusId, 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${entryData.comment || '未命名条目'}`);
+            showStatus(statusId, 'success', `已${result.isUpdate ? '更新' : '添加'}世界书：${result.targetEntry.comment || entryData.label || '未命名条目'}`);
             if (typeof toastr !== 'undefined') toastr.success(`世界书条目已${result.isUpdate ? '更新' : '添加'}`);
             await loadWorldInfoList(result.context, true);
             requestDiscussTokenCountUpdate();
