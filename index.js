@@ -30,11 +30,15 @@
         discussSessionHistory: []
     };
 
-    // 已移除的生成页、状态栏页留下的设置，加载时清掉
+    // 已移除功能留下的设置，加载时清掉：生成页、状态栏页、更早的提示词模板、
+    // 独立世界书页的会话（worldbookSessionHistory）和最早版本的讨论记录（discussionHistory）
     const REMOVED_SETTING_KEYS = [
         'includeDescription', 'includePersonality', 'includeScenario', 'includeCurrentFirstMes',
-        'includePresetPrompts', 'selectedPresetPrompts', 'firstMessageHistory', 'statusBarStyle'
+        'includePresetPrompts', 'selectedPresetPrompts', 'firstMessageHistory', 'statusBarStyle',
+        'customPromptTemplates', 'worldbookSessionHistory', 'discussionHistory'
     ];
+    // 加载时发现了旧键，初始化完成后保存一次，让清理真正写回 settings.json
+    let settingsNeedCleanup = false;
 
     let settings = { ...DEFAULT_SETTINGS };
     let currentWorldInfoSelectionScope = 'global';
@@ -133,6 +137,11 @@
 
         loadSettings();
         await loadHistoryStore();
+        // 放在读取历史文件之后：这时才知道会话该写进文件还是 settings
+        if (settingsNeedCleanup) {
+            settingsNeedCleanup = false;
+            saveSettings();
+        }
         createUI();
         bindEvents();
 
@@ -170,10 +179,11 @@
 
     function normalizeLoadedSettings() {
         migrateApiProfiles();
-        // 独立的世界书页已移除，它的会话记录不再使用；discussionHistory 是更早版本的讨论记录
-        delete settings.worldbookSessionHistory;
-        delete settings.discussionHistory;
-        REMOVED_SETTING_KEYS.forEach(key => delete settings[key]);
+        REMOVED_SETTING_KEYS.forEach(key => {
+            if (!Object.hasOwn(settings, key)) return;
+            delete settings[key];
+            settingsNeedCleanup = true;
+        });
     }
 
     // ========================================

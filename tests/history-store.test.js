@@ -114,3 +114,42 @@ test('读不到历史文件时不迁移，继续存在 settings 里', async () =
     assert.equal(env.files.uploads, 0);
     assert.equal(env.stored().discussSessionHistory[0].id, 's1');
 });
+
+test('初始化时把已移除功能留下的设置从 settings.json 里清掉，会话照常进文件', async () => {
+    let saves = 0;
+    const env = loadWithFiles({
+        extensionSettings: {
+            'first-message-generator': {
+                temperature: 0.5,
+                apiProfiles: [{ id: 'p1', name: '方案一' }],
+                includeDescription: false,
+                statusBarStyle: 'sms',
+                customPromptTemplates: [{ name: '旧模板' }],
+                discussionHistory: [{ old: true }]
+            }
+        },
+        fileContent: { version: 1, discussSessionHistory: [session('s1', 10)] }
+    });
+    env.context.saveSettingsDebounced = () => { saves++; };
+    await env.fmg('init()');
+
+    const stored = env.stored();
+    assert.ok(saves >= 1, '发现旧键后保存了一次');
+    for (const key of ['includeDescription', 'statusBarStyle', 'customPromptTemplates', 'discussionHistory', 'discussSessionHistory']) {
+        assert.ok(!(key in stored), key);
+    }
+    assert.equal(stored.temperature, 0.5);
+    assert.equal(stored.apiProfiles[0].id, 'p1');
+    assert.equal(env.fmg('settings.discussSessionHistory[0].id'), 's1');
+});
+
+test('没有旧键时初始化不额外保存设置', async () => {
+    let saves = 0;
+    const env = loadWithFiles({
+        extensionSettings: { 'first-message-generator': { temperature: 0.5 } },
+        fileContent: { version: 1, discussSessionHistory: [] }
+    });
+    env.context.saveSettingsDebounced = () => { saves++; };
+    await env.fmg('init()');
+    assert.equal(saves, 0);
+});
