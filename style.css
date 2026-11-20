@@ -2,6 +2,19 @@
    开场白生成器 - SillyTavern Extension
    ======================================== */
 
+/* 文字颜色跟随主题：强调色和主题正文色混合，浅色主题上偏深、深色主题上偏浅，两边都能看清。
+   底色和边框仍用半透明强调色。 */
+:root {
+    --fmg-text: var(--SmartThemeBodyColor, #ddd);
+    --fmg-muted: color-mix(in srgb, var(--fmg-text) 70%, transparent);
+    --fmg-red: color-mix(in srgb, #e5484d 50%, var(--fmg-text));
+    --fmg-green: color-mix(in srgb, #2f9e5f 50%, var(--fmg-text));
+    --fmg-blue: color-mix(in srgb, #3a8fd6 50%, var(--fmg-text));
+    --fmg-purple: color-mix(in srgb, #7c6cf0 50%, var(--fmg-text));
+    --fmg-teal: color-mix(in srgb, #12a594 50%, var(--fmg-text));
+    --fmg-orange: color-mix(in srgb, #e07b1f 50%, var(--fmg-text));
+}
+
 /* 弹窗容器 */
 #fmg-popup {
     display: none;
@@ -68,7 +81,7 @@
 
 .fmg-close-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    color: var(--fmg-text);
 }
 
 /* 标签页 */
@@ -152,14 +165,14 @@
 
 .fmg-char-name {
     font-size: 12px;
-    color: #888;
+    color: var(--fmg-muted);
     padding: 2px 8px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
 }
 
 .fmg-char-name.active {
-    color: #64ffda;
+    color: var(--fmg-teal);
     background: rgba(100, 255, 218, 0.1);
 }
 
@@ -191,7 +204,7 @@
     padding: 2px 6px;
     font-size: 10px;
     background: rgba(100, 255, 150, 0.15);
-    color: #64ff96;
+    color: var(--fmg-green);
     border-radius: 3px;
     margin-right: 4px;
 }
@@ -201,7 +214,7 @@
     padding: 2px 6px;
     font-size: 10px;
     background: rgba(255, 100, 100, 0.1);
-    color: #888;
+    color: var(--fmg-muted);
     border-radius: 3px;
     margin-right: 4px;
 }
@@ -225,12 +238,12 @@
 
 .fmg-btn-small:hover {
     background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+    color: var(--fmg-text);
 }
 
 .fmg-btn-small.active {
     background: rgba(100, 200, 255, 0.18);
-    color: #8dc3ff;
+    color: var(--fmg-blue);
     border-color: rgba(100, 200, 255, 0.28);
 }
 
@@ -241,7 +254,7 @@
     border-radius: 999px;
     background: rgba(100, 200, 255, 0.1);
     border: 1px solid rgba(100, 200, 255, 0.18);
-    color: #8dc3ff;
+    color: var(--fmg-blue);
     font-size: 11px;
     line-height: 1;
     white-space: nowrap;
@@ -276,7 +289,7 @@
     padding: 1px 5px;
     font-size: 10px;
     background: rgba(124, 124, 255, 0.3);
-    color: #a0a0ff;
+    color: var(--fmg-purple);
     border-radius: 3px;
     margin-left: 4px;
 }
@@ -286,7 +299,7 @@
     padding: 1px 5px;
     font-size: 10px;
     background: rgba(255, 100, 100, 0.2);
-    color: #ff8888;
+    color: var(--fmg-red);
     border-radius: 3px;
     margin-left: 4px;
 }
@@ -400,19 +413,19 @@
 
 .fmg-status.success {
     background: rgba(100, 255, 150, 0.12);
-    color: #64ff96;
+    color: var(--fmg-green);
     border: 1px solid rgba(100, 255, 150, 0.25);
 }
 
 .fmg-status.error {
     background: rgba(255, 100, 100, 0.12);
-    color: #ff6464;
+    color: var(--fmg-red);
     border: 1px solid rgba(255, 100, 100, 0.25);
 }
 
 .fmg-status.loading {
     background: rgba(100, 150, 255, 0.12);
-    color: #6496ff;
+    color: var(--fmg-blue);
     border: 1px solid rgba(100, 150, 255, 0.25);
 }
 
@@ -497,7 +510,7 @@
 
 .fmg-preview-header h4 {
     margin: 0;
-    color: #fff;
+    color: var(--fmg-text);
     font-size: 15px;
     transition: all 0.3s ease;
 }
@@ -692,11 +705,11 @@
 .fmg-template-chip.fixed,
 .fmg-template-chip-fixed {
     border-color: rgba(100, 200, 255, 0.28);
-    color: #64c8ff;
+    color: var(--fmg-blue);
 }
 
 .fmg-template-chip.empty {
-    color: #888;
+    color: var(--fmg-muted);
     border-style: dashed;
 }
 
@@ -731,7 +744,7 @@
 
 .fmg-btn-open {
     background: rgba(100, 200, 255, 0.15) !important;
-    color: #64c8ff !important;
+    color: var(--fmg-blue) !important;
 }
 
 .fmg-btn-open:hover {
@@ -941,12 +954,12 @@
 
 .fmg-badge-green {
     background: rgba(100, 255, 150, 0.15);
-    color: #64ff96;
+    color: var(--fmg-green);
 }
 
 .fmg-badge-role {
     background: rgba(100, 200, 255, 0.2);
-    color: #64c8ff;
+    color: var(--fmg-blue);
 }
 
 .fmg-select-footer {
@@ -1008,7 +1021,7 @@
 /* 打字光标动画 */
 .fmg-cursor {
     display: inline;
-    color: #64ffda;
+    color: var(--fmg-teal);
     animation: fmg-blink 0.8s ease-in-out infinite;
     font-weight: bold;
 }
@@ -1026,7 +1039,7 @@
 /* 停止生成按钮 */
 .fmg-btn-danger {
     background: rgba(255, 100, 100, 0.25);
-    color: #ff8080;
+    color: var(--fmg-red);
     border: 1px solid rgba(255, 100, 100, 0.4);
 }
 
@@ -1084,7 +1097,7 @@
 
 .fmg-collapse-arrow {
     font-size: 10px;
-    color: #888;
+    color: var(--fmg-muted);
     transition: transform 0.2s;
 }
 
@@ -1103,7 +1116,7 @@
     padding: 6px 12px 10px;
     font-size: 11px;
     line-height: 1.5;
-    color: #aaa;
+    color: var(--fmg-muted);
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 280px;
@@ -1186,20 +1199,20 @@
 
 .fmg-chat-char-info {
     font-size: 13px;
-    color: #888;
+    color: var(--fmg-muted);
     padding: 2px 8px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
 }
 
 .fmg-chat-char-info.active {
-    color: #64ffda;
+    color: var(--fmg-teal);
     background: rgba(100, 255, 218, 0.1);
 }
 
 .fmg-btn-danger-small {
     background: rgba(255, 100, 100, 0.15) !important;
-    color: #ff8080 !important;
+    color: var(--fmg-red) !important;
 }
 
 .fmg-btn-danger-small:hover {
@@ -1227,7 +1240,7 @@
     align-items: center;
     justify-content: center;
     flex: 1;
-    color: #888;
+    color: var(--fmg-muted);
     font-size: 13px;
     text-align: center;
     padding: 30px 20px;
@@ -1256,7 +1269,7 @@
 
 .fmg-chat-label {
     font-size: 11px;
-    color: #888;
+    color: var(--fmg-muted);
     margin-bottom: 3px;
     padding: 0 4px;
 }
@@ -1352,7 +1365,7 @@
     border: 1px dashed rgba(255, 255, 255, 0.12);
     border-radius: 8px;
     font-size: 12px;
-    color: #888;
+    color: var(--fmg-muted);
     text-align: center;
 }
 
@@ -1423,7 +1436,7 @@
 .fmg-discuss-session-title {
     font-size: 12px;
     font-weight: 600;
-    color: #64c8ff;
+    color: var(--fmg-blue);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1431,7 +1444,7 @@
 
 .fmg-discuss-session-time {
     font-size: 10px;
-    color: #777;
+    color: var(--fmg-muted);
     flex-shrink: 0;
 }
 
@@ -1447,7 +1460,7 @@
 
 .fmg-discuss-session-meta {
     font-size: 10px;
-    color: #888;
+    color: var(--fmg-muted);
     margin-bottom: 8px;
 }
 
@@ -1644,7 +1657,7 @@
     background: rgba(124, 124, 255, 0.12);
     font-size: 13px;
     font-weight: 600;
-    color: #a0a0ff;
+    color: var(--fmg-purple);
     border-bottom: 1px solid rgba(124, 124, 255, 0.15);
 }
 
@@ -1658,7 +1671,7 @@
     justify-content: space-between;
     padding: 6px 12px;
     font-size: 11px;
-    color: #888;
+    color: var(--fmg-muted);
     cursor: pointer;
     user-select: none;
     transition: background 0.15s;
@@ -1671,7 +1684,7 @@
 .fmg-edit-card-label-static {
     padding: 6px 12px;
     font-size: 11px;
-    color: #64ffda;
+    color: var(--fmg-teal);
     user-select: none;
 }
 
@@ -1681,7 +1694,7 @@
     padding: 0 12px;
     font-size: 12px;
     line-height: 1.5;
-    color: #999;
+    color: var(--fmg-muted);
     white-space: pre-wrap;
     word-break: break-word;
     background: rgba(0, 0, 0, 0.15);
@@ -1737,7 +1750,7 @@
 .fmg-chat-apply-all-summary {
     margin-right: auto;
     font-size: 12px;
-    color: #aaa;
+    color: var(--fmg-muted);
 }
 
 .fmg-chat-apply-all-bar .fmg-btn {
@@ -1757,7 +1770,7 @@
     gap: 4px;
     padding: 4px 12px;
     font-size: 12px;
-    color: #64ff96;
+    color: var(--fmg-green);
     background: rgba(100, 255, 150, 0.12);
     border-radius: 4px;
 }
@@ -1798,45 +1811,48 @@
     overflow-y: auto;
 }
 
+/* 改动部分用正文色文字加彩色底，不依赖文字颜色区分，任何主题下都清楚 */
 .fmg-patch-old {
-    color: #aaa;
-    background: rgba(255, 100, 100, 0.06);
-    border-left: 3px solid rgba(255, 110, 110, 0.5);
+    color: var(--fmg-muted);
+    background: color-mix(in srgb, #e5484d 8%, transparent);
+    border-left: 3px solid color-mix(in srgb, #e5484d 70%, transparent);
 }
 
 .fmg-patch-new {
-    color: var(--SmartThemeBodyColor, #ddd);
-    background: rgba(100, 255, 150, 0.05);
-    border-left: 3px solid rgba(100, 255, 150, 0.5);
+    color: var(--fmg-text);
+    background: color-mix(in srgb, #2f9e5f 8%, transparent);
+    border-left: 3px solid color-mix(in srgb, #2f9e5f 70%, transparent);
 }
 
 .fmg-patch-mark-del {
-    color: #ff9a9a;
-    background: rgba(255, 100, 100, 0.2);
+    color: var(--fmg-text);
+    background: color-mix(in srgb, #e5484d 24%, transparent);
     text-decoration: line-through;
+    text-decoration-color: var(--fmg-red);
+    text-decoration-thickness: 1.5px;
     border-radius: 2px;
 }
 
 .fmg-patch-mark-ins {
-    color: #8dffb4;
-    background: rgba(100, 255, 150, 0.18);
+    color: var(--fmg-text);
+    background: color-mix(in srgb, #2f9e5f 28%, transparent);
     border-radius: 2px;
 }
 
 .fmg-patch-empty {
-    color: #888;
+    color: var(--fmg-muted);
     font-style: italic;
 }
 
 .fmg-patch-note {
     padding: 6px 12px;
     font-size: 11px;
-    color: #888;
+    color: var(--fmg-muted);
     border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .fmg-patch-note.warning {
-    color: #ffb070;
+    color: var(--fmg-orange);
 }
 
 .fmg-patch-card .fmg-edit-card-old {
@@ -1871,7 +1887,7 @@
     background: rgba(100, 180, 255, 0.12);
     font-size: 13px;
     font-weight: 600;
-    color: #8dc3ff;
+    color: var(--fmg-blue);
     border-bottom: 1px solid rgba(100, 180, 255, 0.15);
 }
 
@@ -1885,7 +1901,7 @@
 }
 
 .fmg-first-message-empty {
-    color: #888;
+    color: var(--fmg-muted);
 }
 
 .fmg-edit-ignored-badge {
@@ -1894,7 +1910,7 @@
     gap: 4px;
     padding: 4px 12px;
     font-size: 12px;
-    color: #888;
+    color: var(--fmg-muted);
     background: rgba(255, 255, 255, 0.06);
     border-radius: 4px;
 }
@@ -1935,7 +1951,7 @@
     background: rgba(100, 200, 255, 0.12);
     font-size: 13px;
     font-weight: 600;
-    color: #64c8ff;
+    color: var(--fmg-blue);
     border-bottom: 1px solid rgba(100, 200, 255, 0.18);
 }
 
@@ -1958,7 +1974,7 @@
 }
 
 .fmg-worldbook-meta-label {
-    color: #8fbad6;
+    color: var(--fmg-blue);
     flex-shrink: 0;
 }
 
@@ -1979,7 +1995,7 @@
 
 .fmg-worldbook-control-label {
     font-size: 12px;
-    color: #8fbad6;
+    color: var(--fmg-blue);
 }
 
 .fmg-worldbook-state-group {
@@ -2008,13 +2024,13 @@
 .fmg-worldbook-state-chip.blue {
     border-color: rgba(100, 170, 255, 0.28);
     background: rgba(100, 170, 255, 0.08);
-    color: #8dc3ff;
+    color: var(--fmg-blue);
 }
 
 .fmg-worldbook-state-chip.green {
     border-color: rgba(110, 220, 140, 0.28);
     background: rgba(110, 220, 140, 0.08);
-    color: #8ee2a5;
+    color: var(--fmg-green);
 }
 
 .fmg-worldbook-select,
@@ -2136,7 +2152,7 @@
     margin: 0;
     padding: 10px 12px;
     background: rgba(0, 0, 0, 0.3);
-    color: #a0a0ff;
+    color: var(--fmg-purple);
     font-size: 11px;
     font-family: monospace;
     white-space: pre-wrap;
@@ -2144,7 +2160,7 @@
 }
 
 .fmg-sb-code-large {
-    color: #64ffda;
+    color: var(--fmg-teal);
     max-height: 150px;
     overflow-y: auto;
 }
@@ -2168,7 +2184,7 @@
     display: block;
     padding: 6px 12px;
     font-size: 11px;
-    color: #888;
+    color: var(--fmg-muted);
     background: rgba(0, 0, 0, 0.1);
 }
 
@@ -2212,12 +2228,12 @@
 .fmg-history-char {
     font-size: 12px;
     font-weight: 600;
-    color: #64c8ff;
+    color: var(--fmg-blue);
 }
 
 .fmg-history-time {
     font-size: 10px;
-    color: #666;
+    color: var(--fmg-muted);
 }
 
 .fmg-history-card-body {
@@ -2228,7 +2244,7 @@
 
 .fmg-history-prompt-preview {
     font-size: 11px;
-    color: #64ffda;
+    color: var(--fmg-teal);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2236,7 +2252,7 @@
 
 .fmg-history-content-preview {
     font-size: 11px;
-    color: #999;
+    color: var(--fmg-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2260,12 +2276,12 @@
 .fmg-history-detail-char {
     font-size: 13px;
     font-weight: 600;
-    color: #64c8ff;
+    color: var(--fmg-blue);
 }
 
 .fmg-history-detail-time {
     font-size: 11px;
-    color: #888;
+    color: var(--fmg-muted);
 }
 
 .fmg-history-detail-section {
@@ -2275,7 +2291,7 @@
 .fmg-history-detail-label {
     font-size: 12px;
     font-weight: 600;
-    color: #64ffda;
+    color: var(--fmg-teal);
     margin-bottom: 4px;
     padding: 4px 0;
 }
