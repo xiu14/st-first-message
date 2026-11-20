@@ -47,22 +47,58 @@ test('讨论回复：全部应用按钮按顺序应用修改和条目，跳过�
     assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /已全部处理/);
 });
 
-test('会话：新建会话保留旧会话，进入所选能恢复', async () => {
+const activeTab = (document) => document.querySelector('.fmg-tab.active').dataset.tab;
+const sessionCards = (document) => Array.from(document.querySelectorAll('#fmg-session-list .fmg-discuss-session-card'));
+
+test('会话页：列出当前角色的会话，新建后回到讨论页，进入所选能恢复', async () => {
     const { document, fmg } = await openWithCharacter();
     fmg(`discussMessages = [createChatMessage('user', '问题一'), createChatMessage('assistant', '回答一')]; saveChatSession();`);
     const firstId = fmg('currentDiscussSessionId');
 
-    fmg('openChatSessionModal()');
-    document.getElementById('fmg-chat-session-new').click();
-    assert.equal(document.getElementById('fmg-chat-session-modal'), null);
+    document.querySelector('.fmg-tab[data-tab="sessions"]').click();
+    assert.equal(sessionCards(document).length, 1);
+    assert.ok(sessionCards(document)[0].classList.contains('active'), '当前会话高亮');
+    assert.match(sessionCards(document)[0].textContent, /问题一[\s\S]*回答一[\s\S]*2 条消息/);
+    assert.equal(document.getElementById('fmg-session-count').textContent, '1/10');
+
+    document.getElementById('fmg-session-new').click();
+    assert.equal(activeTab(document), 'discuss');
     assert.equal(fmg('discussMessages.length'), 0);
     assert.equal(fmg('getCurrentChatSessionRecords().length'), 1);
 
-    fmg('openChatSessionModal()');
-    document.querySelector(`input[name="fmg-chat-session-choice"][value="${firstId}"]`).checked = true;
-    document.getElementById('fmg-chat-session-load').click();
+    document.querySelector('.fmg-tab[data-tab="sessions"]').click();
+    assert.ok(!sessionCards(document)[0].classList.contains('active'), '新建后旧会话不再是当前会话');
+    document.querySelector(`.fmg-session-open[data-session-id="${firstId}"]`).click();
+    assert.equal(activeTab(document), 'discuss');
     assert.equal(fmg('currentDiscussSessionId'), firstId);
     assert.match(document.getElementById('fmg-chat-messages').textContent, /回答一/);
+});
+
+test('会话页：删除前确认，取消时不删', async () => {
+    const { document, fmg, window } = await openWithCharacter();
+    fmg(`discussMessages = [createChatMessage('user', '要删的'), createChatMessage('assistant', '回答')]; saveChatSession();`);
+    document.querySelector('.fmg-tab[data-tab="sessions"]').click();
+
+    window.confirm = () => false;
+    document.querySelector('.fmg-session-delete').click();
+    assert.equal(fmg('getCurrentChatSessionRecords().length'), 1);
+
+    window.confirm = () => true;
+    document.querySelector('.fmg-session-delete').click();
+    assert.equal(fmg('getCurrentChatSessionRecords().length'), 0);
+    assert.match(document.getElementById('fmg-session-list').textContent, /暂无讨论会话/);
+    assert.equal(document.getElementById('fmg-session-count').textContent, '0/10');
+});
+
+test('会话页：每个角色最多保留 10 个，超出时去掉最旧的', async () => {
+    const { fmg } = await openWithCharacter();
+    for (let i = 1; i <= 11; i++) {
+        fmg(`clearDiscussion(); discussMessages = [createChatMessage('user', '问${i}'), createChatMessage('assistant', '答${i}')]; saveChatSession();`);
+    }
+    const titles = Array.from(fmg('getCurrentChatSessionRecords().map(r => r.title)'));
+    assert.equal(titles.length, 10);
+    assert.equal(titles[0], '问11');
+    assert.ok(!titles.includes('问1'), '最旧的会话被去掉');
 });
 
 test('会话：同名角色按头像区分，旧记录按名字兼容', async () => {
@@ -81,11 +117,12 @@ test('会话：同名角色按头像区分，旧记录按名字兼容', async ()
 
 test('会话：所有角色合计不超过上限', async () => {
     const { fmg } = await openWithCharacter();
-    fmg(`settings.discussSessionHistory = Array.from({ length: 40 }, (_, i) => ({ id: 'o' + i, charKey: 'other' + i + '.png', charName: 'B', updatedAt: i, messages: [] }));`);
+    fmg(`settings.discussSessionHistory = Array.from({ length: 210 }, (_, i) => ({ id: 'o' + i, charKey: 'other' + i + '.png', charName: 'B', updatedAt: i, messages: [] }));`);
     fmg(`discussMessages = [createChatMessage('user', 'q'), createChatMessage('assistant', 'r')]; saveChatSession();`);
     const history = fmg('settings.discussSessionHistory');
-    assert.equal(history.length, fmg('CHAT_SESSION_TOTAL_LIMIT'));
-    assert.ok(history.some(r => r.id === 'o39'), '保留最近更新的其他角色会话');
+    assert.equal(fmg('CHAT_SESSION_TOTAL_LIMIT'), 200);
+    assert.equal(history.length, 200);
+    assert.ok(history.some(r => r.id === 'o209'), '保留最近更新的其他角色会话');
     assert.ok(!history.some(r => r.id === 'o0'), '丢弃最旧的会话');
 });
 

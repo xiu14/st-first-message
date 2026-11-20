@@ -425,8 +425,7 @@
 }
 
 /* 选择弹窗 */
-#fmg-selection-modal,
-#fmg-chat-session-modal {
+#fmg-selection-modal {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -1020,52 +1019,9 @@
     text-align: center;
 }
 
-.fmg-chat-session-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 12px;
-    color: var(--SmartThemeBodyColor, #ddd);
-}
-
-.fmg-chat-session-modal-content {
-    width: 560px;
-}
-
-.fmg-chat-session-modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.fmg-chat-session-choice-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 6px;
-}
-
-.fmg-chat-session-choice {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-    cursor: pointer;
-}
-
-.fmg-chat-session-choice input {
-    flex-shrink: 0;
-}
-
 .fmg-discuss-session-card {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--fmg-text) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--fmg-text) 14%, transparent);
     border-radius: 8px;
     padding: 10px 12px;
     transition: border-color 0.2s, background 0.2s;
@@ -1112,7 +1068,50 @@
 .fmg-discuss-session-meta {
     font-size: 10px;
     color: var(--fmg-muted);
-    margin-bottom: 8px;
+}
+
+/* 会话标签页 */
+#fmg-session-char-name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 会话页头部只有角色名和两个小控件，一行放得下；不用讨论页移动端那种按钮组整行换行 */
+.fmg-tab-content[data-tab="sessions"] .fmg-chat-header {
+    align-items: center;
+}
+
+.fmg-tab-content[data-tab="sessions"] .fmg-chat-header .fmg-btn-group {
+    width: auto;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.fmg-session-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fmg-session-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.fmg-session-current-badge {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    font-size: 10px;
+    border-radius: 999px;
+    color: var(--fmg-blue);
+    background: color-mix(in srgb, #3a8fd6 16%, transparent);
 }
 
 /* 移动端适配 - 讨论页 */

@@ -16,7 +16,7 @@ test('打开弹窗、切换所有标签页、ESC 关闭都不报错', async () =
 
     assert.match(env.document.querySelector('#fmg-popup .fmg-header h3').textContent, /角色卡编辑器/);
     const tabs = Array.from(env.document.querySelectorAll('.fmg-tab')).map(tab => tab.dataset.tab);
-    assert.deepEqual(tabs, ['discuss', 'api']);
+    assert.deepEqual(tabs, ['discuss', 'sessions', 'api']);
     assert.ok(env.document.querySelector('.fmg-tab-content[data-tab="discuss"]').classList.contains('active'), '默认打开讨论页');
     for (const tab of env.document.querySelectorAll('.fmg-tab')) {
         tab.click();
@@ -24,10 +24,10 @@ test('打开弹窗、切换所有标签页、ESC 关闭都不报错', async () =
         assert.ok(content.classList.contains('active'), `${tab.dataset.tab} 标签页已激活`);
     }
 
-    env.document.getElementById('fmg-discuss-session-open').click();
-    assert.ok(env.document.getElementById('fmg-chat-session-modal'));
+    env.document.getElementById('fmg-discuss-wi-open').click();
+    assert.ok(env.document.getElementById('fmg-selection-modal'));
     env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    assert.equal(env.document.getElementById('fmg-chat-session-modal'), null, 'ESC 先关闭会话弹窗');
+    assert.equal(env.document.getElementById('fmg-selection-modal'), null, 'ESC 先关闭条目选择弹窗');
     env.document.dispatchEvent(new env.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     assert.ok(!env.document.getElementById('fmg-popup').classList.contains('show'), '再按 ESC 关闭主弹窗');
 

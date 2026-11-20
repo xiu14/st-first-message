@@ -15,8 +15,8 @@ SillyTavern 扩展插件：和 AI 讨论角色卡与世界书，把修改建议�
 - **世界书条目**：AI 输出 `[WORLDBOOK_ENTRY]` 新建或更新条目；更新时没写的字段沿用原值。
   写入后回读服务器确认，失败会报错而不是假成功。
 - **条目选择**：选择 AI 能看到的世界书条目；装了 ST-Grouping 时按它的世界书分组显示。
-- **最近会话**：每个角色保留最近 3 个讨论会话，存在 `data/<用户>/user/files/first-message-generator-history.json`，
-  不占 settings.json。
+- **会话页**：每个角色保留最近 10 个讨论会话（所有角色合计最多 200 个），可以进入、新建、删除。
+  存在 `data/<用户>/user/files/first-message-generator-history.json`，不占 settings.json。
 - **全部应用**：一条回复里有多个修改时，可以按顺序一次应用。
 - **独立 API 配置**：支持 OpenAI / Gemini 格式，可保存多套方案切换。
 

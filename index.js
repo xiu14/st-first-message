@@ -26,7 +26,7 @@
         selectedWorldEntries: [],
         worldInfoSelectionsByScope: {},
         worldInfoSelectionInitializedByScope: {},
-        // 讨论最近会话（每个角色最多3条，所有角色合计最多30条）
+        // 讨论会话（每个角色最多10个，所有角色合计最多200个）
         discussSessionHistory: []
     };
 
@@ -460,6 +460,7 @@
             
             <div class="fmg-tabs">
                 <button class="fmg-tab active" data-tab="discuss">讨论/世界书</button>
+                <button class="fmg-tab" data-tab="sessions">会话</button>
                 <button class="fmg-tab" data-tab="api">API</button>
             </div>
             
@@ -498,13 +499,6 @@
                                     <button class="fmg-btn-small fmg-btn-open" id="fmg-discuss-wi-open">选择条目</button>
                                 </div>
                             </div>
-                            <div class="fmg-chat-session-bar">
-                                <span>🕘 最近会话</span>
-                                <div class="fmg-btn-group">
-                                    <span class="fmg-count" id="fmg-discuss-session-count">0/3</span>
-                                    <button class="fmg-btn-small fmg-btn-open" id="fmg-discuss-session-open">打开</button>
-                                </div>
-                            </div>
                         </div>
                         
                         <div class="fmg-chat-messages" id="fmg-chat-messages">
@@ -520,6 +514,18 @@
                         </div>
                         <div id="fmg-discuss-status" class="fmg-status" style="display: none;"></div>
                     </div>
+                </div>
+
+                <!-- 会话页 -->
+                <div class="fmg-tab-content" data-tab="sessions">
+                    <div class="fmg-chat-header">
+                        <span class="fmg-chat-char-info" id="fmg-session-char-name">未选择角色</span>
+                        <div class="fmg-btn-group">
+                            <span class="fmg-count" id="fmg-session-count">0/${CHAT_SESSION_HISTORY_LIMIT}</span>
+                            <button class="fmg-btn-small fmg-btn-open" id="fmg-session-new" title="开始一个空白会话，当前会话仍保留在列表里">＋ 新建会话</button>
+                        </div>
+                    </div>
+                    <div class="fmg-session-list" id="fmg-session-list"></div>
                 </div>
 
                 <!-- API设置页 -->
@@ -699,7 +705,7 @@
     // ========================================
 
     // 只处理插件自己界面内的事件，避免 ST 页面上任何操作都触发保存或 token 统计
-    const FMG_EVENT_SCOPE = '#fmg-popup, #fmg-overlay, #fmg-chat-session-modal';
+    const FMG_EVENT_SCOPE = '#fmg-popup, #fmg-overlay';
 
     function toggleCollapse(header, body) {
         if (!body) return;
@@ -727,16 +733,8 @@
         'fmg-discuss-refresh': () => loadCharacterData(),
         'fmg-discuss-focus-toggle': () => setDiscussFocusMode(!discussFocusMode),
         'fmg-discuss-wi-open': () => openSelectionModal(),
-        'fmg-discuss-session-open': () => openChatSessionModal(),
-        'fmg-chat-session-close': () => closeChatSessionModal(),
-        'fmg-chat-session-new': () => {
-            if (startNewChatSession()) closeChatSessionModal();
-        },
-        'fmg-chat-session-load': () => {
-            const checked = document.querySelector('#fmg-chat-session-modal input[name="fmg-chat-session-choice"]:checked');
-            if (!checked) return;
-            loadChatSession(checked.value);
-            closeChatSessionModal();
+        'fmg-session-new': () => {
+            if (startNewChatSession()) switchTab('discuss');
         }
     };
 
@@ -744,10 +742,13 @@
     const DELEGATED_CLICK_ACTIONS = [
         ['.fmg-tab', (el) => switchTab(el.dataset.tab)],
         ['#fmg-popup .fmg-close-btn', () => closePopup()],
-        ['#fmg-chat-session-modal .fmg-select-overlay', () => closeChatSessionModal()],
-        ['.fmg-chat-session-delete', (el) => {
-            deleteChatSession(el.dataset.sessionId);
-            renderChatSessionModalBody();
+        ['.fmg-session-open', (el) => {
+            if (loadChatSession(el.dataset.sessionId)) switchTab('discuss');
+        }],
+        ['.fmg-session-delete', (el) => {
+            const record = getChatSessionHistory().find(item => item.id === el.dataset.sessionId);
+            if (!record || !confirm(`确定删除会话「${record.title || '未命名会话'}」？`)) return;
+            deleteChatSession(record.id);
         }],
         ['.fmg-edit-apply', (el) => {
             const editData = window._fmgPendingEdits?.[el.dataset.editKey];
@@ -833,11 +834,6 @@
 
     // ESC 优先关闭顶层弹窗，最后关闭主弹窗
     function handleEscape() {
-        if (document.getElementById('fmg-chat-session-modal')) {
-            closeChatSessionModal();
-            return;
-        }
-
         const selectModal = document.getElementById('fmg-selection-modal');
         if (selectModal) {
             selectModal.remove();
@@ -939,9 +935,6 @@
         document.getElementById('fmg-popup').classList.remove('show');
         
         // 同时清理可能正在打开的子弹窗
-        const sessionModal = document.getElementById('fmg-chat-session-modal');
-        if (sessionModal) sessionModal.remove();
-
         const selectModal = document.getElementById('fmg-selection-modal');
         if (selectModal) selectModal.remove();
     }
@@ -1576,8 +1569,9 @@
     // ========================================
 
     // 讨论对话历史
-    const CHAT_SESSION_HISTORY_LIMIT = 3;
-    const CHAT_SESSION_TOTAL_LIMIT = 30;
+    // 每个角色保留最近 10 个会话；所有角色合计超过 200 个时删掉最旧的，避免历史文件无限增长
+    const CHAT_SESSION_HISTORY_LIMIT = 10;
+    const CHAT_SESSION_TOTAL_LIMIT = 200;
     let discussMessages = [];
     let chatMessageIdCounter = 0;
     let discussFocusMode = false;
@@ -1710,7 +1704,7 @@
         const otherCharacters = history.filter(item => !isSessionOfCharacter(item, charData));
         const sameCharacter = history.filter(item => isSessionOfCharacter(item, charData) && item.id !== id);
         const keptSame = [record, ...sameCharacter].slice(0, CHAT_SESSION_HISTORY_LIMIT);
-        // 其他角色的会话按更新时间保留最近的，避免 settings 无限增长
+        // 其他角色的会话按更新时间保留最近的，避免历史文件无限增长
         const keptOthers = otherCharacters
             .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
             .slice(0, Math.max(0, CHAT_SESSION_TOTAL_LIMIT - keptSame.length));
@@ -1721,83 +1715,52 @@
         renderChatSessionControls();
     }
 
+    // 会话标签页：列出当前角色的会话，当前会话高亮
     function renderChatSessionControls() {
-        const countEl = document.getElementById('fmg-discuss-session-count');
-        if (countEl) {
-            countEl.textContent = `${getCurrentChatSessionRecords().length}/${CHAT_SESSION_HISTORY_LIMIT}`;
+        const charData = window._fmgCharData;
+        const sessions = charData ? getCurrentChatSessionRecords() : [];
+
+        const nameEl = document.getElementById('fmg-session-char-name');
+        if (nameEl) {
+            nameEl.textContent = charData ? `🎭 ${charData.name || '未命名角色'}` : '未选择角色';
+            nameEl.classList.toggle('active', !!charData);
         }
-    }
+        const countEl = document.getElementById('fmg-session-count');
+        if (countEl) countEl.textContent = `${sessions.length}/${CHAT_SESSION_HISTORY_LIMIT}`;
+        const newBtn = document.getElementById('fmg-session-new');
+        if (newBtn) newBtn.disabled = !charData;
 
-    function renderChatSessionModalBody() {
-        const modal = document.getElementById('fmg-chat-session-modal');
-        if (!modal) return;
+        const list = document.getElementById('fmg-session-list');
+        if (!list) return;
 
-        const body = modal.querySelector('#fmg-chat-session-body');
-        const loadBtn = modal.querySelector('#fmg-chat-session-load');
-        const sessions = getCurrentChatSessionRecords();
-
-        if (!body) return;
-
+        if (!charData) {
+            list.innerHTML = '<div class="fmg-discuss-history-empty">请先在 ST 里选择一个角色</div>';
+            return;
+        }
         if (sessions.length === 0) {
-            body.innerHTML = '<div class="fmg-discuss-history-empty">暂无讨论会话</div>';
-            if (loadBtn) loadBtn.disabled = true;
-            renderChatSessionControls();
+            list.innerHTML = '<div class="fmg-discuss-history-empty">暂无讨论会话，在讨论页聊过之后会自动保存在这里</div>';
             return;
         }
 
-        body.innerHTML = sessions.map((record, index) => {
-            const checked = record.id === currentDiscussSessionId || (!currentDiscussSessionId && index === 0);
-            const activeClass = record.id === currentDiscussSessionId ? ' active' : '';
+        list.innerHTML = sessions.map(record => {
+            const isCurrent = record.id === currentDiscussSessionId;
             return `
-                <div class="fmg-discuss-session-card${activeClass}">
-                    <div class="fmg-chat-session-choice-row">
-                        <label class="fmg-chat-session-choice">
-                            <input type="radio" name="fmg-chat-session-choice" value="${escapeHtml(record.id)}" ${checked ? 'checked' : ''}>
-                            <span class="fmg-discuss-session-title">${escapeHtml(record.title || '未命名会话')}</span>
-                        </label>
-                        <button class="fmg-btn-small fmg-btn-danger-small fmg-chat-session-delete" data-session-id="${escapeHtml(record.id)}">删除</button>
-                    </div>
+                <div class="fmg-discuss-session-card${isCurrent ? ' active' : ''}" data-session-id="${escapeHtml(record.id)}">
                     <div class="fmg-discuss-session-header">
-                        <span class="fmg-discuss-session-time">${escapeHtml(record.timestamp || '')}</span>
-                        <span class="fmg-discuss-session-meta">${escapeHtml(String(record.messageCount || 0))} 条消息</span>
+                        <span class="fmg-discuss-session-title">${escapeHtml(record.title || '未命名会话')}</span>
+                        ${isCurrent ? '<span class="fmg-session-current-badge">当前</span>' : ''}
                     </div>
                     <div class="fmg-discuss-session-preview">${escapeHtml(record.preview || '')}</div>
-                </div>
-            `;
-        }).join('');
-
-        if (loadBtn) loadBtn.disabled = false;
-        renderChatSessionControls();
-    }
-
-    function openChatSessionModal() {
-        closeChatSessionModal();
-
-        const modal = document.createElement('div');
-        modal.id = 'fmg-chat-session-modal';
-        modal.innerHTML = `
-            <div class="fmg-select-overlay"></div>
-            <div class="fmg-select-content fmg-chat-session-modal-content">
-                <div class="fmg-select-header">
-                    <h4>🕘 讨论最近会话</h4>
-                    <button class="fmg-close-btn" id="fmg-chat-session-close">×</button>
-                </div>
-                <div class="fmg-select-body fmg-chat-session-modal-body" id="fmg-chat-session-body"></div>
-                <div class="fmg-select-footer">
-                    <span class="fmg-select-info">每个角色保留最近 ${CHAT_SESSION_HISTORY_LIMIT} 个会话</span>
-                    <div class="fmg-btn-group">
-                        <button class="fmg-btn fmg-btn-secondary" id="fmg-chat-session-new" title="开始一个空白会话，当前会话仍保留在最近会话中">＋ 新建会话</button>
-                        <button class="fmg-btn fmg-btn-primary" id="fmg-chat-session-load">进入所选</button>
+                    <div class="fmg-session-footer">
+                        <span class="fmg-discuss-session-meta">${escapeHtml(record.timestamp || '')} · ${escapeHtml(String(record.messageCount || 0))} 条消息</span>
+                        <div class="fmg-btn-group">
+                            <button class="fmg-btn-small fmg-btn-danger-small fmg-session-delete" data-session-id="${escapeHtml(record.id)}">删除</button>
+                            <button class="fmg-btn-small fmg-btn-open fmg-session-open" data-session-id="${escapeHtml(record.id)}">${isCurrent ? '回到讨论' : '进入'}</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        renderChatSessionModalBody();
-    }
-
-    function closeChatSessionModal() {
-        document.getElementById('fmg-chat-session-modal')?.remove();
+            `.trim();
+        }).join('');
     }
 
     function deleteChatSession(sessionId, silent = false) {
@@ -1811,7 +1774,7 @@
         saveSettings();
         renderChatSessionControls();
         if (!silent && typeof toastr !== 'undefined') {
-            toastr.info('最近会话已删除');
+            toastr.info('会话已删除');
         }
     }
 
@@ -1819,14 +1782,17 @@
         return isDiscussGenerating;
     }
 
+    // 返回是否进入成功
     function loadChatSession(sessionId) {
         if (isDiscussBusy()) {
+            if (typeof toastr !== 'undefined') toastr.warning('请先等待当前回复生成完，再切换会话');
             showStatus('fmg-discuss-status', 'error', '请先等待当前操作完成，再进入历史会话');
-            return;
+            return false;
         }
 
         const record = getChatSessionHistory().find(item => item.id === sessionId);
-        if (!record) return;
+        if (!record) return false;
+        if (record.id === currentDiscussSessionId) return true;
 
         const messages = getVisibleChatSessionMessages(record.messages);
         ensureChatMessageIds(messages);
@@ -1836,19 +1802,22 @@
         currentDiscussSessionId = record.id;
         renderDiscussionHistory();
         updateDiscussPanel();
-        showStatus('fmg-discuss-status', 'success', '已进入最近会话');
+        renderChatSessionControls();
+        showStatus('fmg-discuss-status', 'success', '已进入会话');
+        return true;
     }
 
     function startNewChatSession() {
         if (isDiscussBusy()) {
+            if (typeof toastr !== 'undefined') toastr.warning('请先等待当前回复生成完，再新建会话');
             showStatus('fmg-discuss-status', 'error', '请先等待当前操作完成，再新建会话');
             return false;
         }
 
-        // 清空只重置当前会话，已保存的记录仍保留在最近会话中
+        // 清空只重置当前会话，已保存的记录仍保留在会话页
         saveChatSession();
         clearDiscussion();
-        showStatus('fmg-discuss-status', 'success', '已新建会话，之前的会话仍可在「最近会话」中进入');
+        showStatus('fmg-discuss-status', 'success', '已新建会话，之前的会话仍可在「会话」页进入');
         return true;
     }
 
@@ -3936,7 +3905,7 @@ ${editableEntriesText}
     }
 
     // ========================================
-    // 流式 API 调用（讨论、开场白、状态栏共用）
+    // 流式 API 调用
     // ========================================
 
     /**
