@@ -807,6 +807,11 @@
     display: block;
 }
 
+/* 只在手机专注模式下显示（那时标题栏和它的关闭按钮被藏起来了） */
+.fmg-focus-close {
+    display: none;
+}
+
 .fmg-discuss-container.chat-focused .fmg-discuss-focus-hidden {
     display: none;
 }
@@ -1206,32 +1211,19 @@
         }
     }
 
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-header {
-        min-height: 30px;
-        padding: 3px 8px;
-        flex-shrink: 0;
-    }
-
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-header h3 {
-        font-size: 12px;
-        line-height: 1;
-    }
-
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-close-btn {
-        min-width: 26px;
-        height: 26px;
-        padding: 0 7px;
-        font-size: 18px;
-        line-height: 1;
-    }
-
+    /* 标题栏和标签页整个藏掉；关闭按钮改由讨论页头部的 ✕ 提供 */
+    #fmg-popup.fmg-mobile-chat-focus-active .fmg-header,
     #fmg-popup.fmg-mobile-chat-focus-active .fmg-tabs {
-        flex-shrink: 0;
+        display: none !important;
     }
 
-    #fmg-popup.fmg-mobile-chat-focus-active .fmg-tab {
-        padding: 7px 4px;
-        font-size: 12px;
+    #fmg-popup.fmg-mobile-chat-focus-active .fmg-focus-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        min-width: 26px;
+        padding: 3px 6px;
     }
 
     #fmg-popup.fmg-mobile-chat-focus-active .fmg-content {
@@ -1239,14 +1231,15 @@
         overflow: hidden;
     }
 
+    /* 内容区上下内边距各 6px，聊天区占满剩下的整屏 */
     #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container {
-        height: calc(100vh - 122px);
+        height: calc(100vh - 12px);
         max-height: none;
     }
 
     @supports (height: 100dvh) {
         #fmg-popup.fmg-mobile-chat-focus-active .fmg-discuss-container {
-            height: calc(100dvh - 122px);
+            height: calc(100dvh - 12px);
         }
     }
 

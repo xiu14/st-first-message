@@ -289,3 +289,18 @@ test('讨论页提示浮在聊天区上：成功提示自动消失，点击可�
     fmg(`showStatus('fmg-discuss-status', 'success', '完成')`);
     assert.equal(status.textContent, '完成');
 });
+
+test('专注模式：弹窗进入专注状态，讨论页头部的关闭按钮能关闭弹窗', async () => {
+    const env = loadExtension();
+    const { document } = env;
+    document.querySelector('#fmg-wand-container .list-group-item').click();
+    await flush(50);
+    const popup = document.getElementById('fmg-popup');
+
+    document.getElementById('fmg-discuss-focus-toggle').click();
+    assert.ok(popup.classList.contains('fmg-mobile-chat-focus-active'));
+    assert.equal(document.getElementById('fmg-discuss-focus-toggle').textContent, '↕ 展开');
+
+    document.getElementById('fmg-discuss-close').click();
+    assert.ok(!popup.classList.contains('show'));
+});

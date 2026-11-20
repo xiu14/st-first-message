@@ -487,6 +487,7 @@
                                 <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-discuss-clear" title="清空对话">🗑️ 清空</button>
                                 <span class="fmg-token-badge" id="fmg-discuss-token-total" title="估算当前讨论会话发送内容的总 token">总Token --</span>
                             </div>
+                            <button class="fmg-btn-small fmg-focus-close" id="fmg-discuss-close" title="关闭角色卡编辑器">✕</button>
                         </div>
 
                         <!-- 角色卡完整内容折叠预览 -->
@@ -734,6 +735,7 @@
     // 按元素 id 分发的点击操作
     const CLICK_ACTIONS = {
         'fmg-overlay': () => closePopup(),
+        'fmg-discuss-close': () => closePopup(),
         'fmg-test': () => testConnection(),
         'fmg-get-models': () => getModels(),
         'fmg-save-api': () => saveApiSettings(),
