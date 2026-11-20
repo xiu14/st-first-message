@@ -758,7 +758,10 @@
         ['.fmg-tab', (el) => switchTab(el.dataset.tab)],
         ['#fmg-popup .fmg-close-btn', () => closePopup()],
         ['.fmg-session-open', (el) => {
-            if (loadChatSession(el.dataset.sessionId)) switchTab('discuss');
+            if (!loadChatSession(el.dataset.sessionId)) return;
+            // 渲染时讨论页还隐藏着，滚动不生效；切过去之后再滚到底部
+            switchTab('discuss');
+            scrollDiscussToBottom();
         }],
         ['.fmg-session-delete', (el) => {
             const record = getChatSessionHistory().find(item => item.id === el.dataset.sessionId);
@@ -1605,6 +1608,12 @@
         return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
     }
 
+    function scrollDiscussToBottom() {
+        const container = document.getElementById('fmg-chat-messages');
+        discussAutoScroll = true;
+        if (container) container.scrollTop = container.scrollHeight;
+    }
+
     function createChatMessage(role, content) {
         chatMessageIdCounter += 1;
         return {
@@ -1869,8 +1878,7 @@
         }
 
         visibleMessages.forEach(msg => appendChatMessage(msg.role, msg.content, false, msg.id));
-        discussAutoScroll = true;
-        container.scrollTop = container.scrollHeight;
+        scrollDiscussToBottom();
         updateDiscussUndoButton();
         requestDiscussTokenCountUpdate();
     }

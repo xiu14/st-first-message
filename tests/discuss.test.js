@@ -74,6 +74,25 @@ test('会话页：列出当前角色的会话，新建后回到讨论页，进�
     assert.match(document.getElementById('fmg-chat-messages').textContent, /回答一/);
 });
 
+test('会话页：进入会话后讨论页滚到底部', async () => {
+    const { document, fmg } = await openWithCharacter();
+    fmg(`discussMessages = [createChatMessage('user', '问'), createChatMessage('assistant', '答')]; saveChatSession();`);
+    const firstId = fmg('currentDiscussSessionId');
+    document.getElementById('fmg-session-new').click();
+
+    // jsdom 不算布局：模拟真实浏览器里讨论页隐藏时 scrollHeight 为 0
+    const container = document.getElementById('fmg-chat-messages');
+    const discussTab = document.querySelector('.fmg-tab-content[data-tab="discuss"]');
+    let scrollTop = 0;
+    Object.defineProperty(container, 'scrollHeight', { get: () => (discussTab.classList.contains('active') ? 1000 : 0) });
+    Object.defineProperty(container, 'scrollTop', { get: () => scrollTop, set: (v) => { scrollTop = v; } });
+
+    document.querySelector('.fmg-tab[data-tab="sessions"]').click();
+    document.querySelector(`.fmg-session-open[data-session-id="${firstId}"]`).click();
+    assert.equal(activeTab(document), 'discuss');
+    assert.equal(scrollTop, 1000);
+});
+
 test('会话页：删除前确认，取消时不删', async () => {
     const { document, fmg, window } = await openWithCharacter();
     fmg(`discussMessages = [createChatMessage('user', '要删的'), createChatMessage('assistant', '回答')]; saveChatSession();`);
