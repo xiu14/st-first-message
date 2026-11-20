@@ -2520,6 +2520,19 @@ ${editableEntriesText}
         throw new Error('找不到这段原文：内容可能已经改过，或 AI 引用得不准确');
     }
 
+    const PATCH_ALREADY_APPLIED_MESSAGE = '找不到这段原文，但修改后的内容已经在里面了，可能已经应用过';
+
+    // 原文找不到时，看修改后的文字是否恰好出现一处，用来提示「已经改过了」
+    function isHunkAlreadyApplied(texts, hunk) {
+        if (!hunk.replace.trim()) return false;
+        try {
+            locatePatchHunk(texts, hunk.replace);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     /**
      * 把替换块依次应用到文本（或字符串数组，如可选开场白）上，返回新值，不修改传入的值。
      * 任一处定位失败都会抛错，不会只改一半。
@@ -2537,7 +2550,8 @@ ${editableEntriesText}
             try {
                 match = locatePatchHunk(texts, hunk.find);
             } catch (error) {
-                throw new Error(hunks.length > 1 ? `第 ${i + 1} 处修改：${error.message}` : error.message);
+                const message = isHunkAlreadyApplied(texts, hunk) ? PATCH_ALREADY_APPLIED_MESSAGE : error.message;
+                throw new Error(hunks.length > 1 ? `第 ${i + 1} 处修改：${message}` : message);
             }
             // 模糊匹配的范围不含首尾空白，替换文本也去掉首尾空白，保留原文的换行和缩进
             const replacement = match.fuzzy ? hunk.replace.trim() : hunk.replace;
@@ -2717,7 +2731,12 @@ ${editableEntriesText}
         if (!textEl || !cardStates) return;
         textEl.querySelectorAll('[data-card-index]').forEach(card => {
             const state = cardStates[card.dataset.cardIndex];
-            if (state) setCardState(card, state, { record: false });
+            if (!state) return;
+            // 局部修改的预览是按现在的内容算的；已处理过的卡片，这份预览已经过时（应用后原文找不到了），去掉只留改动对照
+            if (card.classList.contains('fmg-patch-card')) {
+                card.querySelectorAll('.fmg-patch-note, .fmg-edit-card-old').forEach(el => el.remove());
+            }
+            setCardState(card, state, { record: false });
         });
     }
 

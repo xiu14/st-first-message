@@ -88,6 +88,33 @@ test('角色卡局部修改：按应用时的最新内容定位，不会覆盖�
     assert.equal(env.context.characters[0].data.description, '她叫小晴。\n她总是独来独往，不愿与人交谈。\n喜欢在雨天写信。');
 });
 
+test('局部修改应用后重新渲染：显示已应用，不再提示找不到原文', async () => {
+    const env = await setup();
+    showReply(env, patchBlock('description', ['不愿与人交谈。', '对熟人话多。']));
+    env.document.querySelector('.fmg-edit-apply').click();
+    await flush(50);
+
+    // 模拟刷新后重新进入会话
+    env.fmg('renderDiscussionHistory()');
+    const card = env.document.querySelector('.fmg-patch-card');
+    assert.ok(card.classList.contains('applied'));
+    assert.match(card.querySelector('.fmg-edit-card-actions').textContent, /已应用/);
+    assert.equal(card.querySelector('.fmg-patch-note'), null);
+    assert.equal(card.querySelector('.fmg-edit-card-old'), null);
+    assert.equal(card.querySelector('.fmg-patch-mark-ins').textContent, '对熟人话多');
+});
+
+test('没有记录状态但内容已经改过时，提示可能已经应用过', async () => {
+    const env = await setup();
+    const changed = DESC.replace('不愿与人交谈。', '对熟人话多。');
+    env.context.characters[0].description = changed;
+    env.context.characters[0].data.description = changed;
+    await env.fmg('loadCharacterData()');
+    showReply(env, patchBlock('description', ['不愿与人交谈。', '对熟人话多。']));
+    assert.match(env.document.querySelector('.fmg-patch-note.warning').textContent, /可能已经应用过/);
+    assert.throws(() => patch(env, '啊啊。', [{ find: '没有', replace: '' }]), /^Error: 找不到这段原文：/);
+});
+
 test('角色卡局部修改：找不到原文时不保存，按钮变为重试', async () => {
     const env = await setup();
     showReply(env, patchBlock('description', ['根本没有这句', '新内容']));
