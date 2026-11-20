@@ -14,8 +14,10 @@ test('打开弹窗、切换所有标签页、ESC 关闭都不报错', async () =
     await flush(50);
     assert.ok(env.document.getElementById('fmg-popup').classList.contains('show'));
 
+    assert.match(env.document.querySelector('#fmg-popup .fmg-header h3').textContent, /角色卡编辑器/);
     const tabs = Array.from(env.document.querySelectorAll('.fmg-tab')).map(tab => tab.dataset.tab);
-    assert.deepEqual(tabs, ['generate', 'discuss', 'statusbar', 'api']);
+    assert.deepEqual(tabs, ['discuss', 'api']);
+    assert.ok(env.document.querySelector('.fmg-tab-content[data-tab="discuss"]').classList.contains('active'), '默认打开讨论页');
     for (const tab of env.document.querySelectorAll('.fmg-tab')) {
         tab.click();
         const content = env.document.querySelector(`.fmg-tab-content[data-tab="${tab.dataset.tab}"]`);
@@ -35,11 +37,22 @@ test('打开弹窗、切换所有标签页、ESC 关闭都不报错', async () =
 test('加载设置时清理旧版本遗留数据', () => {
     const env = loadExtension({
         extensionSettings: {
-            'first-message-generator': { worldbookSessionHistory: [{ id: 'x' }], discussSessionHistory: [] }
+            'first-message-generator': {
+                worldbookSessionHistory: [{ id: 'x' }],
+                discussSessionHistory: [],
+                // 已移除的生成页、状态栏页的设置
+                includeDescription: false,
+                selectedPresetPrompts: ['a'],
+                statusBarStyle: 'sms',
+                firstMessageHistory: [{ id: 1 }]
+            }
         }
     });
     env.window.localStorage.setItem('first_message_generator_settings', '{"apiKey":"old"}');
     env.fmg('loadSettings()');
     assert.equal(env.fmg('settings.worldbookSessionHistory'), undefined);
+    for (const key of ['includeDescription', 'selectedPresetPrompts', 'statusBarStyle', 'firstMessageHistory']) {
+        assert.equal(env.fmg(`settings.${key}`), undefined, key);
+    }
     assert.equal(env.window.localStorage.getItem('first_message_generator_settings'), null);
 });

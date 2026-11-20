@@ -1,6 +1,7 @@
 /**
- * 开场白生成器 - SillyTavern Extension
- * 功能：选择预设、世界书条目、角色卡信息，通过AI生成开场白并应用
+ * 角色卡编辑器 - SillyTavern Extension
+ * 功能：和 AI 讨论角色卡与世界书，把修改建议直接应用到角色卡和世界书
+ * （EXTENSION_NAME 等标识沿用开场白生成器时期的名字，保证已有设置和会话可用）
  */
 
 (function () {
@@ -21,24 +22,19 @@
         // API 配置方案（可保存多套并切换）
         apiProfiles: [],
         activeApiProfileId: '',
-        // 数据选择状态
-        includeDescription: true,
-        includePersonality: true,
-        includeScenario: true,
-        includeCurrentFirstMes: true,
+        // 世界书条目选择
         selectedWorldEntries: [],
         worldInfoSelectionsByScope: {},
         worldInfoSelectionInitializedByScope: {},
-        // 预设条目相关
-        includePresetPrompts: false,
-        selectedPresetPrompts: [],
-        // 开场白历史记录（最多5条）
-        firstMessageHistory: [],
         // 讨论最近会话（每个角色最多3条，所有角色合计最多30条）
-        discussSessionHistory: [],
-        // 状态栏设计方向
-        statusBarStyle: 'director'
+        discussSessionHistory: []
     };
+
+    // 已移除的生成页、状态栏页留下的设置，加载时清掉
+    const REMOVED_SETTING_KEYS = [
+        'includeDescription', 'includePersonality', 'includeScenario', 'includeCurrentFirstMes',
+        'includePresetPrompts', 'selectedPresetPrompts', 'firstMessageHistory', 'statusBarStyle'
+    ];
 
     let settings = { ...DEFAULT_SETTINGS };
     let currentWorldInfoSelectionScope = 'global';
@@ -177,6 +173,7 @@
         // 独立的世界书页已移除，它的会话记录不再使用；discussionHistory 是更早版本的讨论记录
         delete settings.worldbookSessionHistory;
         delete settings.discussionHistory;
+        REMOVED_SETTING_KEYS.forEach(key => delete settings[key]);
     }
 
     // ========================================
@@ -262,8 +259,8 @@
         try {
             const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
             if (context && context.extensionSettings) {
-                // 历史文件可用时，讨论会话和开场白历史不再写进 settings.json
-                const { discussSessionHistory, firstMessageHistory, ...rest } = settings;
+                // 历史文件可用时，讨论会话不再写进 settings.json
+                const { discussSessionHistory, ...rest } = settings;
                 context.extensionSettings[EXTENSION_NAME] = historyFileReady ? rest : { ...settings };
                 if (typeof context.saveSettingsDebounced === 'function') {
                     context.saveSettingsDebounced();
@@ -295,11 +292,10 @@
             : { 'Content-Type': 'application/json' };
     }
 
-    function serializeHistory(discussSessionHistory = settings.discussSessionHistory, firstMessageHistory = settings.firstMessageHistory) {
+    function serializeHistory(discussSessionHistory = settings.discussSessionHistory) {
         return JSON.stringify({
             version: 1,
-            discussSessionHistory: Array.isArray(discussSessionHistory) ? discussSessionHistory : [],
-            firstMessageHistory: Array.isArray(firstMessageHistory) ? firstMessageHistory : []
+            discussSessionHistory: Array.isArray(discussSessionHistory) ? discussSessionHistory : []
         });
     }
 
@@ -346,21 +342,18 @@
     async function loadHistoryStore() {
         const context = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
         const storedSettings = context?.extensionSettings?.[EXTENSION_NAME] || {};
-        const hasLegacy = Object.hasOwn(storedSettings, 'discussSessionHistory') || Object.hasOwn(storedSettings, 'firstMessageHistory');
+        const hasLegacy = Object.hasOwn(storedSettings, 'discussSessionHistory');
 
         try {
             const stored = await readHistoryFile();
             if (stored) {
                 const storedSessions = Array.isArray(stored.discussSessionHistory) ? stored.discussSessionHistory : [];
-                const storedFirstMessages = Array.isArray(stored.firstMessageHistory) ? stored.firstMessageHistory : [];
                 // settings 里还有旧记录（上次迁移后没来得及清理，或文件曾不可用）时合并，避免丢记录
                 settings.discussSessionHistory = hasLegacy
                     ? mergeHistoryRecords(storedSessions, settings.discussSessionHistory, record => record.updatedAt || 0)
                     : storedSessions;
-                settings.firstMessageHistory = hasLegacy
-                    ? mergeHistoryRecords(storedFirstMessages, settings.firstMessageHistory, record => Number(record.id) || 0).slice(0, 5)
-                    : storedFirstMessages;
-                lastSavedHistoryJson = serializeHistory(storedSessions, storedFirstMessages);
+                // 用文件原内容比较：文件里还留着已移除的开场白历史时，会重写一次把它去掉
+                lastSavedHistoryJson = JSON.stringify(stored);
             }
 
             const json = serializeHistory();
@@ -376,7 +369,7 @@
             historyFileReady = true;
             if (hasLegacy) {
                 saveSettings();
-                console.log('[开场白生成器] 讨论会话和开场白历史已迁移到', `user/files/${HISTORY_FILE_NAME}`);
+                console.log('[开场白生成器] 讨论会话已迁移到', `user/files/${HISTORY_FILE_NAME}`);
             }
         } catch (e) {
             console.warn('[开场白生成器] 历史记录文件不可用，继续存在 settings 里:', e);
@@ -434,13 +427,13 @@
         menuItem.className = 'list-group-item flex-container flexGap5 interactable';
         menuItem.setAttribute('tabindex', '0');
         menuItem.setAttribute('role', 'listitem');
-        menuItem.title = '开场白生成器';
+        menuItem.title = '角色卡编辑器';
 
         const icon = document.createElement('div');
         icon.className = 'fa-fw fa-solid fa-message extensionsMenuExtensionButton';
 
         const text = document.createElement('span');
-        text.textContent = '开场白生成器';
+        text.textContent = '角色卡编辑器';
 
         menuItem.appendChild(icon);
         menuItem.appendChild(text);
@@ -461,92 +454,18 @@
         popup.id = 'fmg-popup';
         popup.innerHTML = `
             <div class="fmg-header">
-                <h3>💬 开场白生成器</h3>
+                <h3>💬 角色卡编辑器</h3>
                 <button class="fmg-close-btn">×</button>
             </div>
             
             <div class="fmg-tabs">
-                <button class="fmg-tab active" data-tab="generate">生成</button>
-                <button class="fmg-tab" data-tab="discuss">讨论/世界书</button>
-                <button class="fmg-tab" data-tab="statusbar">状态栏</button>
+                <button class="fmg-tab active" data-tab="discuss">讨论/世界书</button>
                 <button class="fmg-tab" data-tab="api">API</button>
             </div>
             
             <div class="fmg-content">
-                <!-- 生成页 -->
-                <div class="fmg-tab-content active" data-tab="generate">
-                    <!-- 角色信息区 -->
-                    <div class="fmg-section">
-                        <div class="fmg-section-header">
-                            <h4>👤 角色信息</h4>
-                            <span class="fmg-char-name" id="fmg-char-name">未选择角色</span>
-                        </div>
-                        <div class="fmg-checkbox-group">
-                            <label><input type="checkbox" id="fmg-inc-desc" checked> 描述</label>
-                            <label><input type="checkbox" id="fmg-inc-pers" checked> 性格</label>
-                            <label><input type="checkbox" id="fmg-inc-scen" checked> 场景</label>
-                            <label><input type="checkbox" id="fmg-inc-first" checked> 当前开场白</label>
-                        </div>
-                        <div class="fmg-data-preview" id="fmg-data-preview">
-                            <div style="color: #888; font-size: 11px;">点击刷新加载数据预览</div>
-                        </div>
-                    </div>
-                    
-                    <!-- 世界书区 -->
-                    <div class="fmg-section fmg-section-compact">
-                        <div class="fmg-section-header">
-                            <h4>📚 世界书条目</h4>
-                            <div class="fmg-btn-group">
-                                <span class="fmg-count" id="fmg-wi-count">0/0</span>
-                                <button class="fmg-btn-small fmg-btn-open" id="fmg-wi-open">选择条目</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 预设条目区 -->
-                    <div class="fmg-section fmg-section-compact">
-                        <div class="fmg-section-header">
-                            <h4>📋 预设条目</h4>
-                            <div class="fmg-btn-group">
-                                <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
-                                    <input type="checkbox" id="fmg-inc-preset"> 包含
-                                </label>
-                                <span class="fmg-count" id="fmg-preset-count">0/0</span>
-                                <button class="fmg-btn-small fmg-btn-open" id="fmg-preset-open">选择条目</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 需求输入 -->
-                    <div class="fmg-section">
-                        <label>✍️ 开场白需求</label>
-                        <textarea id="fmg-prompt" class="fmg-textarea" 
-                            placeholder="描述你想要的开场白风格...&#10;例如：神秘感、第一人称视角、包含环境描写"></textarea>
-                    </div>
-                    
-                    <!-- 操作按钮 -->
-                    <div class="fmg-actions">
-                        <button class="fmg-btn fmg-btn-secondary" id="fmg-refresh">🔄 刷新</button>
-                        <button class="fmg-btn fmg-btn-primary" id="fmg-generate">✨ 生成开场白</button>
-                    </div>
-                    
-                    <div id="fmg-status" class="fmg-status" style="display: none;"></div>
-                    
-                    <!-- 最近生成记录 -->
-                    <div class="fmg-section fmg-history-section" id="fmg-history-section" style="display: none;">
-                        <div class="fmg-section-header">
-                            <h4>📋 最近生成记录</h4>
-                            <div class="fmg-btn-group">
-                                <span class="fmg-count" id="fmg-history-count">0/5</span>
-                                <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-history-clear">🗑 清除</button>
-                            </div>
-                        </div>
-                        <div class="fmg-history-list" id="fmg-history-list"></div>
-                    </div>
-                </div>
-                
                 <!-- 讨论页 -->
-                <div class="fmg-tab-content" data-tab="discuss">
+                <div class="fmg-tab-content active" data-tab="discuss">
                     <div class="fmg-discuss-container">
                         <div class="fmg-chat-header">
                             <span class="fmg-chat-char-info" id="fmg-discuss-char-name">未选择角色</span>
@@ -603,97 +522,6 @@
                     </div>
                 </div>
 
-                <!-- 状态栏页 -->
-                <div class="fmg-tab-content" data-tab="statusbar">
-                    <div class="fmg-sb-container">
-                        <div class="fmg-chat-header">
-                            <span class="fmg-chat-char-info" id="fmg-sb-char-name">未选择角色</span>
-                            <button class="fmg-btn-small" id="fmg-sb-refresh" title="刷新角色数据">🔄 刷新</button>
-                            <button class="fmg-btn-small fmg-btn-danger-small" id="fmg-sb-clear" title="清除状态栏并重置">🗑️ 清除</button>
-                        </div>
-                        
-                        <!-- 需求输入 -->
-                        <div class="fmg-section">
-                            <label>✍️ 描述你想要的状态栏</label>
-                            <div class="fmg-sb-style-row">
-                                <label for="fmg-sb-style">风格方向</label>
-                                <select id="fmg-sb-style" class="fmg-sb-style-select">
-                                    <option value="director">自由导演</option>
-                                    <option value="sms">短信气泡</option>
-                                    <option value="dossier">精致档案卡</option>
-                                    <option value="hud">玻璃 HUD</option>
-                                    <option value="minimal">极简状态牌</option>
-                                    <option value="notebook">手账纸条</option>
-                                    <option value="terminal">赛博终端</option>
-                                    <option value="ritual">神秘仪式</option>
-                                </select>
-                            </div>
-                            <textarea id="fmg-sb-prompt" class="fmg-textarea" 
-                                placeholder="描述你想要的状态栏样式和内容...&#10;例如：包含日期、时间、地点、心情、穿着，用羊皮纸风格美化"></textarea>
-                        </div>
-                        
-                        <div class="fmg-actions">
-                            <button class="fmg-btn fmg-btn-primary" id="fmg-sb-generate">✨ 生成状态栏</button>
-                        </div>
-                        
-                        <!-- 预览区 -->
-                        <div id="fmg-sb-preview-area" style="display:none;">
-                            <!-- 视觉效果预览 -->
-                            <div class="fmg-sb-preview-section">
-                                <div class="fmg-sb-preview-header" data-target="fmg-sb-visual-body">
-                                    <span>👁️ 效果预览</span>
-                                    <span class="fmg-collapse-arrow">▼</span>
-                                </div>
-                                <div class="fmg-sb-preview-body open" id="fmg-sb-visual-body">
-                                    <div class="fmg-sb-visual-content" id="fmg-sb-visual-content">等待生成...</div>
-                                </div>
-                            </div>
-
-                            <!-- 世界书条目预览 -->
-                            <div class="fmg-sb-preview-section">
-                                <div class="fmg-sb-preview-header" data-target="fmg-sb-wi-body">
-                                    <span>📋 世界书条目预览</span>
-                                    <span class="fmg-collapse-arrow">▼</span>
-                                </div>
-                                <div class="fmg-sb-preview-body open" id="fmg-sb-wi-body">
-                                    <pre class="fmg-sb-code" id="fmg-sb-wi-content">等待生成...</pre>
-                                </div>
-                            </div>
-                            
-                            <!-- 正则脚本预览 -->
-                            <div class="fmg-sb-preview-section">
-                                <div class="fmg-sb-preview-header" data-target="fmg-sb-regex-body">
-                                    <span>🎨 正则脚本预览</span>
-                                    <span class="fmg-collapse-arrow">▼</span>
-                                </div>
-                                <div class="fmg-sb-preview-body open" id="fmg-sb-regex-body">
-                                    <div class="fmg-sb-regex-field">
-                                        <label>查找正则</label>
-                                        <pre class="fmg-sb-code" id="fmg-sb-regex-find">等待生成...</pre>
-                                    </div>
-                                    <div class="fmg-sb-regex-field">
-                                        <label>替换为 (HTML/CSS)</label>
-                                        <pre class="fmg-sb-code fmg-sb-code-large" id="fmg-sb-regex-replace">等待生成...</pre>
-                                    </div>
-                                    <div class="fmg-sb-regex-field">
-                                        <label>修剪掉</label>
-                                        <pre class="fmg-sb-code" id="fmg-sb-regex-trim">等待生成...</pre>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- 应用按钮 -->
-                            <div class="fmg-actions">
-                                <button class="fmg-btn fmg-btn-secondary" id="fmg-sb-apply-wi">📋 应用世界书条目</button>
-                                <button class="fmg-btn fmg-btn-primary" id="fmg-sb-apply-regex">🎨 应用正则脚本</button>
-                                <button class="fmg-btn" id="fmg-sb-regenerate" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">🔄 重新生成</button>
-                            </div>
-                        </div>
-                        
-                        <div id="fmg-sb-status" class="fmg-status" style="display: none;"></div>
-                    </div>
-                </div>
-                
                 <!-- API设置页 -->
                 <div class="fmg-tab-content" data-tab="api">
                     <div class="fmg-form-group">
@@ -776,8 +604,6 @@
             temperature: settings.temperature,
             maxTokens: settings.maxTokens
         });
-
-        syncCharacterIncludeControls();
     }
 
     function renderApiProfileSelect() {
@@ -868,20 +694,6 @@
         showStatus('fmg-api-status', 'success', `已删除「${profile.name}」` + (next ? `，当前使用「${next.name}」` : ''));
     }
 
-    function syncCharacterIncludeControls() {
-        const controlMap = [
-            ['fmg-inc-desc', settings.includeDescription],
-            ['fmg-inc-pers', settings.includePersonality],
-            ['fmg-inc-scen', settings.includeScenario],
-            ['fmg-inc-first', settings.includeCurrentFirstMes]
-        ];
-
-        controlMap.forEach(([id, checked]) => {
-            const el = document.getElementById(id);
-            if (el) el.checked = checked;
-        });
-    }
-
     // ========================================
     // 事件绑定
     // ========================================
@@ -903,30 +715,19 @@
     // 按元素 id 分发的点击操作
     const CLICK_ACTIONS = {
         'fmg-overlay': () => closePopup(),
-        'fmg-refresh': () => loadCharacterData(),
-        'fmg-generate': () => generateFirstMessage(),
         'fmg-test': () => testConnection(),
         'fmg-get-models': () => getModels(),
         'fmg-save-api': () => saveApiSettings(),
         'fmg-api-profile-new': () => newApiProfile(),
         'fmg-api-profile-delete': () => deleteApiProfile(),
-        'fmg-wi-open': () => openSelectionModal('worldinfo'),
-        'fmg-preset-open': () => openSelectionModal('preset'),
-        'fmg-history-clear': () => clearAllHistory(),
         // 发送按钮在生成中充当停止按钮
         'fmg-discuss-send': () => (isDiscussGenerating ? stopDiscussGeneration() : sendDiscussMessage()),
         'fmg-discuss-undo': () => undoLastDiscussRound(),
         'fmg-discuss-clear': () => clearDiscussion(),
         'fmg-discuss-refresh': () => loadCharacterData(),
         'fmg-discuss-focus-toggle': () => setDiscussFocusMode(!discussFocusMode),
-        'fmg-discuss-wi-open': () => openSelectionModal('worldinfo'),
+        'fmg-discuss-wi-open': () => openSelectionModal(),
         'fmg-discuss-session-open': () => openChatSessionModal(),
-        'fmg-sb-generate': () => generateStatusBar(),
-        'fmg-sb-regenerate': () => generateStatusBar(),
-        'fmg-sb-clear': () => clearStatusBar(),
-        'fmg-sb-refresh': () => loadCharacterData(),
-        'fmg-sb-apply-wi': () => applyStatusBarWorldEntry(),
-        'fmg-sb-apply-regex': () => applyStatusBarRegex(),
         'fmg-chat-session-close': () => closeChatSessionModal(),
         'fmg-chat-session-new': () => {
             if (startNewChatSession()) closeChatSessionModal();
@@ -963,30 +764,12 @@
             el.textContent = '⏳ 添加中...';
             applyWorldbookEntry(entryData, el);
         }],
-        ['.fmg-first-message-plan-apply', (el) => {
-            const planData = window._fmgPendingFirstMessagePlans?.[el.dataset.planKey];
-            if (!planData) return;
-            el.disabled = true;
-            el.textContent = '⏳ 跳转中...';
-            applyFirstMessagePlan(planData, el);
-        }],
-        ['.fmg-edit-ignore, .fmg-worldbook-ignore, .fmg-first-message-plan-ignore', (el) => {
-            setCardState(el.closest('.fmg-edit-card, .fmg-worldbook-card, .fmg-first-message-plan-card'), 'ignored');
+        ['.fmg-edit-ignore, .fmg-worldbook-ignore', (el) => {
+            setCardState(el.closest('.fmg-edit-card, .fmg-worldbook-card'), 'ignored');
         }],
         ['.fmg-edit-card-old .fmg-edit-card-label', (el) => toggleCollapse(el, el.nextElementSibling)],
-        ['.fmg-collapse-header, .fmg-sb-preview-header', (el) => toggleCollapse(el, document.getElementById(el.dataset.target))],
-        ['.fmg-history-card', (el) => {
-            const index = parseInt(el.dataset.historyIndex, 10);
-            if (!isNaN(index)) showHistoryDetail(index);
-        }]
+        ['.fmg-collapse-header', (el) => toggleCollapse(el, document.getElementById(el.dataset.target))]
     ];
-
-    const CHARACTER_INCLUDE_SETTINGS = {
-        'fmg-inc-desc': 'includeDescription',
-        'fmg-inc-pers': 'includePersonality',
-        'fmg-inc-scen': 'includeScenario',
-        'fmg-inc-first': 'includeCurrentFirstMes'
-    };
 
     function handleClick(e) {
         if (!e.target.closest(FMG_EVENT_SCOPE)) return;
@@ -1011,24 +794,9 @@
         const target = e.target;
         if (!target.closest(FMG_EVENT_SCOPE)) return;
 
-        if (CHARACTER_INCLUDE_SETTINGS[target.id]) {
-            settings[CHARACTER_INCLUDE_SETTINGS[target.id]] = target.checked;
-            saveSettings();
+        if (target.id === 'fmg-api-profile') {
+            switchApiProfile(target.value);
             return;
-        }
-
-        switch (target.id) {
-            case 'fmg-api-profile':
-                switchApiProfile(target.value);
-                return;
-            case 'fmg-inc-preset':
-                settings.includePresetPrompts = target.checked;
-                saveSettings();
-                return;
-            case 'fmg-sb-style':
-                settings.statusBarStyle = target.value || 'director';
-                saveSettings();
-                return;
         }
 
         if (target.classList.contains('fmg-worldbook-position-select')) {
@@ -1065,12 +833,6 @@
 
     // ESC 优先关闭顶层弹窗，最后关闭主弹窗
     function handleEscape() {
-        const historyModal = document.getElementById('fmg-history-detail-modal');
-        if (historyModal) {
-            historyModal.remove();
-            return;
-        }
-
         if (document.getElementById('fmg-chat-session-modal')) {
             closeChatSessionModal();
             return;
@@ -1079,12 +841,6 @@
         const selectModal = document.getElementById('fmg-selection-modal');
         if (selectModal) {
             selectModal.remove();
-            return;
-        }
-
-        if (document.getElementById('fmg-preview-modal')) {
-            stopGeneration();
-            closePreview();
             return;
         }
 
@@ -1175,9 +931,7 @@
         document.getElementById('fmg-overlay').classList.add('show');
         document.getElementById('fmg-popup').classList.add('show');
         updatePopupFocusState();
-        updateStatusBarStyleControl();
         loadCharacterData();
-        renderHistoryList();
     }
 
     function closePopup() {
@@ -1185,12 +939,6 @@
         document.getElementById('fmg-popup').classList.remove('show');
         
         // 同时清理可能正在打开的子弹窗
-        const previewModal = document.getElementById('fmg-preview-modal');
-        if (previewModal) previewModal.remove();
-        
-        const historyModal = document.getElementById('fmg-history-detail-modal');
-        if (historyModal) historyModal.remove();
-
         const sessionModal = document.getElementById('fmg-chat-session-modal');
         if (sessionModal) sessionModal.remove();
 
@@ -1206,9 +954,6 @@
             content.classList.toggle('active', content.dataset.tab === tabName);
         });
         updatePopupFocusState(tabName);
-        if (tabName === 'statusbar') {
-            updateStatusBarStyleControl();
-        }
         renderChatSessionControls();
     }
 
@@ -1224,13 +969,6 @@
         popup.classList.toggle('fmg-mobile-chat-focus-active', isFocusedChatTab);
     }
 
-    function updateStatusBarStyleControl() {
-        const styleSelect = document.getElementById('fmg-sb-style');
-        if (styleSelect) {
-            styleSelect.value = settings.statusBarStyle || 'director';
-        }
-    }
-
     // ========================================
     // 数据加载
     // ========================================
@@ -1239,22 +977,13 @@
         try {
             const context = SillyTavern.getContext();
 
-            // 显示角色名
-            const charNameEl = document.getElementById('fmg-char-name');
-            const dataPreviewEl = document.getElementById('fmg-data-preview');
-
             if (context.characterId !== undefined && context.characters[context.characterId]) {
                 const char = context.characters[context.characterId];
-
-                charNameEl.textContent = char.name || '未命名角色';
-                charNameEl.classList.add('active');
 
                 const desc = char.description || char.data?.description;
                 const pers = char.personality || char.data?.personality;
                 const scen = char.scenario || char.data?.scenario;
                 const first = char.first_mes || char.data?.first_mes;
-
-                dataPreviewEl.innerHTML = buildCharacterDataPreviewHtml({ desc, pers, scen, first });
 
                 // 缓存角色数据（包含全部字段）
                 const d = char.data || {};
@@ -1281,9 +1010,6 @@
                 resetChatSessionsForCharacter(getCharacterKey(window._fmgCharData));
 
             } else {
-                charNameEl.textContent = '未选择角色';
-                charNameEl.classList.remove('active');
-                dataPreviewEl.innerHTML = '<span style="color: #ff6464; font-size: 11px;">请先选择一个角色</span>';
                 window._fmgCharData = null;
                 resetChatSessionsForCharacter(null);
             }
@@ -1291,36 +1017,12 @@
             // 加载世界书条目
             await loadWorldInfoList(context);
 
-            // 加载预设条目
-            loadPresetPrompts(context);
-
             // 更新讨论页面板
             updateDiscussPanel();
-
-            // 更新状态栏数据并触发角色切换清理检测
-            updateSbCharName();
         } catch (e) {
             console.error('[开场白生成器] 加载数据失败:', e);
-            showStatus('fmg-status', 'error', '加载数据失败: ' + e.message);
+            showStatus('fmg-discuss-status', 'error', '加载数据失败: ' + e.message);
         }
-    }
-
-    function buildCharacterDataPreviewHtml({ desc, pers, scen, first }) {
-        const previews = [];
-
-        if (desc) previews.push('<span class="fmg-tag-ok">描述✓</span>');
-        else previews.push('<span class="fmg-tag-empty">描述✗</span>');
-
-        if (pers) previews.push('<span class="fmg-tag-ok">性格✓</span>');
-        else previews.push('<span class="fmg-tag-empty">性格✗</span>');
-
-        if (scen) previews.push('<span class="fmg-tag-ok">场景✓</span>');
-        else previews.push('<span class="fmg-tag-empty">场景✗</span>');
-
-        if (first) previews.push('<span class="fmg-tag-ok">开场白✓</span>');
-        else previews.push('<span class="fmg-tag-empty">开场白✗</span>');
-
-        return previews.join(' ');
     }
 
     async function syncWorldInfoDisplay(worldName, worldData) {
@@ -1643,49 +1345,19 @@
     }
 
     function updateCounts() {
-        // 更新世界书计数
-        const wiEntries = window._fmgWorldEntries || [];
-        const wiSelected = getSelectedWorldInfo().length;
-        const wiCountEl = document.getElementById('fmg-wi-count');
-        if (wiCountEl) {
-            wiCountEl.textContent = `${wiSelected}/${wiEntries.length}`;
-        }
-
-        // 更新预设计数
-        const presetEntries = window._fmgPresetPrompts || [];
-        const presetSelected = (settings.selectedPresetPrompts || []).length;
-        const presetCountEl = document.getElementById('fmg-preset-count');
-        if (presetCountEl) {
-            presetCountEl.textContent = `${presetSelected}/${presetEntries.length}`;
-        }
-
-        // 同步讨论页世界书计数
         updateDiscussWiCount();
     }
 
-    function renderSelectionItem(entry, index, isWorldInfo, savedSelections) {
-        const name = isWorldInfo
-            ? (entry.name || `条目${index + 1}`)
-            : (entry.name || entry.identifier || `条目${index + 1}`);
-        const identifier = isWorldInfo
-            ? getWorldInfoIdentifier(entry, index)
-            : (entry.identifier || entry.name || `prompt_${index}`);
-        const isEnabled = entry.enabled !== false;
-        const isChecked = isWorldInfo
-            ? isWorldInfoEntrySelected(entry, index, savedSelections)
-            : savedSelections.includes(identifier);
+    function renderSelectionItem(entry, index, savedSelections) {
+        const name = entry.name || `条目${index + 1}`;
+        const identifier = getWorldInfoIdentifier(entry, index);
+        const isChecked = isWorldInfoEntrySelected(entry, index, savedSelections);
 
-        const badges = [];
-        if (isWorldInfo) {
-            badges.push(entry.constant ? '<span class="fmg-badge">常驻</span>' : '<span class="fmg-badge fmg-badge-green">绿灯</span>');
-            if (!isEnabled) badges.push('<span class="fmg-badge-off">禁用</span>');
-        } else {
-            badges.push(isEnabled ? '<span class="fmg-badge">启用</span>' : '<span class="fmg-badge-off">禁用</span>');
-            if (entry.role) badges.push(`<span class="fmg-badge fmg-badge-role">${escapeHtml(entry.role)}</span>`);
-        }
+        const badges = [entry.constant ? '<span class="fmg-badge">常驻</span>' : '<span class="fmg-badge fmg-badge-green">绿灯</span>'];
+        if (entry.enabled === false) badges.push('<span class="fmg-badge-off">禁用</span>');
 
         // 搜索文本：名称、关键词和内容
-        const searchText = [name, ...(entry.key || []), entry.content || entry.prompt || ''].join('\n').toLowerCase();
+        const searchText = [name, ...(entry.key || []), entry.content || ''].join('\n').toLowerCase();
 
         return `
             <div class="fmg-select-item" data-search="${escapeHtml(searchText)}">
@@ -1763,17 +1435,14 @@
         `;
     }
 
-    function openSelectionModal(type) {
+    function openSelectionModal() {
         // 移除已存在的弹窗
         const existing = document.getElementById('fmg-selection-modal');
         if (existing) existing.remove();
 
-        const isWorldInfo = type === 'worldinfo';
-        const title = isWorldInfo ? '📚 选择世界书条目' : '📋 选择预设条目';
-        const entries = isWorldInfo ? (window._fmgWorldEntries || []) : (window._fmgPresetPrompts || []);
-        const savedSelections = isWorldInfo
-            ? getSavedWorldInfoSelections()
-            : (settings.selectedPresetPrompts || []);
+        const title = '📚 选择世界书条目';
+        const entries = window._fmgWorldEntries || [];
+        const savedSelections = getSavedWorldInfoSelections();
 
         if (entries.length === 0) {
             if (typeof toastr !== 'undefined') {
@@ -1782,8 +1451,8 @@
             return;
         }
 
-        const renderItem = (index) => renderSelectionItem(entries[index], index, isWorldInfo, savedSelections);
-        const groupSections = isWorldInfo ? getWorldInfoGroupSections(entries) : null;
+        const renderItem = (index) => renderSelectionItem(entries[index], index, savedSelections);
+        const groupSections = getWorldInfoGroupSections(entries);
         const listHtml = groupSections
             ? groupSections.map(section => renderSelectionGroup(section, renderItem)).join('')
             : entries.map((_, index) => renderItem(index)).join('');
@@ -1894,84 +1563,12 @@
                 selectedIdentifiers.push(cb.dataset.identifier);
             });
 
-            if (isWorldInfo) {
-                setSavedWorldInfoSelections(selectedIdentifiers);
-            } else {
-                settings.selectedPresetPrompts = selectedIdentifiers;
-            }
+            setSavedWorldInfoSelections(selectedIdentifiers);
             saveSettings();
             updateCounts();
             modal.remove();
-            if (isWorldInfo) {
-                requestDiscussTokenCountUpdate();
-            }
+            requestDiscussTokenCountUpdate();
         };
-    }
-
-    // ========================================
-    // 预设条目
-    // ========================================
-
-    function loadPresetPrompts(context) {
-        const incPresetCheckbox = document.getElementById('fmg-inc-preset');
-        window._fmgPresetPrompts = [];
-
-        try {
-            // 获取 Chat Completion 设置
-            const chatSettings = context.chatCompletionSettings;
-
-            if (!chatSettings || !chatSettings.prompts) {
-                updateCounts();
-                return;
-            }
-
-            // 获取 prompts 数组
-            const prompts = chatSettings.prompts || [];
-
-            // 过滤出有内容的条目
-            const validPrompts = prompts.filter(p => p && (p.content || p.prompt));
-
-            window._fmgPresetPrompts = validPrompts;
-
-            // 恢复总开关状态
-            if (incPresetCheckbox) {
-                incPresetCheckbox.checked = settings.includePresetPrompts;
-            }
-
-            // 如果没有保存的选择，初始化为启用的条目
-            if (!settings.selectedPresetPrompts || settings.selectedPresetPrompts.length === 0) {
-                const defaultSelections = [];
-                validPrompts.forEach((prompt, idx) => {
-                    if (prompt.enabled !== false) {
-                        const identifier = prompt.identifier || prompt.name || `prompt_${idx}`;
-                        defaultSelections.push(identifier);
-                    }
-                });
-                settings.selectedPresetPrompts = defaultSelections;
-                saveSettings();
-            }
-
-            // 更新计数
-            updateCounts();
-
-        } catch (e) {
-            console.error('[开场白生成器] 加载预设条目失败:', e);
-        }
-    }
-
-    function getSelectedPresets() {
-        const prompts = window._fmgPresetPrompts || [];
-        const savedSelections = settings.selectedPresetPrompts || [];
-        const selected = [];
-
-        prompts.forEach((prompt, idx) => {
-            const identifier = prompt.identifier || prompt.name || `prompt_${idx}`;
-            if (savedSelections.includes(identifier)) {
-                selected.push(prompt);
-            }
-        });
-
-        return selected;
     }
 
     // ========================================
@@ -2274,10 +1871,8 @@
 
         window._fmgPendingEdits = {};
         window._fmgPendingWorldbookEntries = {};
-        window._fmgPendingFirstMessagePlans = {};
         _editIdCounter = 0;
         _worldbookEntryIdCounter = 0;
-        _firstMessagePlanIdCounter = 0;
         container.innerHTML = '';
 
         if (visibleMessages.length === 0) {
@@ -2552,26 +2147,6 @@
 8. 改动超过原文一半或需要整体重写时，改用 [EDIT] 或 [WORLDBOOK_ENTRY] 输出完整内容。
 9. 只有在用户明确要求修改时才使用此格式。`);
 
-        parts.push(`【开场白生成规划格式说明】
-当用户明确要求“生成开场白”“给我写开场白”“最后帮我出一个开场白”“按刚才修改后的设定生成开场白”等需求时，不要直接输出最终开场白。你应该先给出一个简短大纲，让用户确认后再由工具调用生成页完成正式生成。
-
-请使用以下精确格式输出规划块，不要使用 markdown 代码块包裹：
-[FIRST_MESSAGE_PLAN]
-{
-  "title": "开场白生成大纲标题",
-  "style": "整体风格，例如悬疑、温柔日常、压迫感、第一人称等",
-  "outline": ["开场画面", "角色登场方式", "互动钩子", "氛围或冲突"],
-  "request": "可直接填入开场白生成页的完整需求，包含视角、语气、长度、需要强调的设定和避免事项",
-  "notes": "可选补充，提醒用户确认的重点"
-}
-[/FIRST_MESSAGE_PLAN]
-
-开场白规划规则：
-1. 只有用户明确要生成开场白时才输出 [FIRST_MESSAGE_PLAN] 块。
-2. request 必须是完整、可直接用于生成页的中文需求，不要只写几个关键词。
-3. outline 应该简洁，帮助用户确认方向，不要写最终成品。
-4. 如果用户同时要求修改角色卡字段，可以同时输出 [EDIT] 块和 [FIRST_MESSAGE_PLAN] 块，但必须让用户先确认应用修改后再确认生成。`);
-
         parts.push(`【世界书条目输出格式说明】
 当用户明确要求“输出世界书条目”“给我可直接添加的版本”“生成可写入世界书的内容”“把刚才讨论的设定沉淀到世界书”时，你可以在解释后输出一个或多个世界书条目块。
 
@@ -2713,9 +2288,7 @@ ${editableEntriesText}
     // ========================================
 
     window._fmgPendingEdits = {};
-    window._fmgPendingFirstMessagePlans = {};
     let _editIdCounter = 0;
-    let _firstMessagePlanIdCounter = 0;
 
     function parseEditBlocks(text) {
         const regex = /\[EDIT:([^\]\s]+)\]([\s\S]*?)\[\/EDIT\]/g;
@@ -2822,45 +2395,16 @@ ${editableEntriesText}
         return rawValue;
     }
 
-    function parseFirstMessagePlanBlocks(text) {
+    // 开场白生成页已移除；旧会话里的开场白大纲块按原文显示，但仍占一个卡片序号，
+    // 保证之后卡片的已应用/已忽略状态（按序号保存）不会错位
+    function parseLegacyFirstMessagePlanBlocks(text) {
         const regex = /\[FIRST_MESSAGE_PLAN\]([\s\S]*?)\[\/FIRST_MESSAGE_PLAN\]/g;
-        const plans = [];
+        const blocks = [];
         let match;
-
         while ((match = regex.exec(text)) !== null) {
-            const rawBlock = match[1].trim();
-            try {
-                const parsed = JSON.parse(rawBlock);
-                const outline = Array.isArray(parsed.outline)
-                    ? parsed.outline.map(item => String(item || '').trim()).filter(Boolean)
-                    : normalizeStringArray(parsed.outline);
-                const request = String(parsed.request || parsed.prompt || parsed.requirement || '').trim();
-
-                if (!request && outline.length === 0) {
-                    throw new Error('缺少 request 或 outline');
-                }
-
-                plans.push({
-                    title: String(parsed.title || '开场白生成大纲').trim(),
-                    style: String(parsed.style || '').trim(),
-                    outline,
-                    request,
-                    notes: String(parsed.notes || parsed.note || '').trim(),
-                    start: match.index,
-                    end: regex.lastIndex
-                });
-            } catch (error) {
-                plans.push({
-                    invalid: true,
-                    raw: rawBlock,
-                    error: error.message,
-                    start: match.index,
-                    end: regex.lastIndex
-                });
-            }
+            blocks.push({ raw: match[0], start: match.index, end: regex.lastIndex });
         }
-
-        return plans;
+        return blocks;
     }
 
     // ========================================
@@ -3018,87 +2562,6 @@ ${editableEntriesText}
         return isArray ? texts : texts[0];
     }
 
-    function buildFirstMessageRequestFromPlan(plan) {
-        const parts = [];
-        if (plan.request) parts.push(plan.request);
-        if (plan.style) parts.push(`风格方向：${plan.style}`);
-        if (Array.isArray(plan.outline) && plan.outline.length > 0) {
-            parts.push(`开场白大纲：\n${plan.outline.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
-        }
-        if (plan.notes) parts.push(`补充注意：${plan.notes}`);
-        return parts.join('\n\n').trim();
-    }
-
-    function renderFirstMessagePlanCard(plan, planKey, cardIndex) {
-        if (plan.invalid) {
-            return `
-                <div class="fmg-first-message-plan-card invalid">
-                    <div class="fmg-first-message-plan-header">⚠️ 开场白大纲解析失败</div>
-                    <div class="fmg-worldbook-meta">
-                        <div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">原因</span><span>${escapeHtml(plan.error || '未知错误')}</span></div>
-                    </div>
-                    <div class="fmg-edit-card-new">
-                        <div class="fmg-edit-card-label-static">原始内容</div>
-                        <div class="fmg-edit-card-new-content">${escapeHtml(plan.raw || '')}</div>
-                    </div>
-                </div>
-            `;
-        }
-
-        const outlineHtml = Array.isArray(plan.outline) && plan.outline.length > 0
-            ? `<ol class="fmg-first-message-outline">${plan.outline.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`
-            : '<div class="fmg-first-message-empty">（未提供大纲条目）</div>';
-        const requestText = buildFirstMessageRequestFromPlan(plan);
-
-        return `
-            <div class="fmg-first-message-plan-card" data-plan-key="${planKey}" data-card-index="${cardIndex}">
-                <div class="fmg-first-message-plan-header">📝 ${escapeHtml(plan.title || '开场白生成大纲')}</div>
-                <div class="fmg-worldbook-meta">
-                    ${plan.style ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">风格</span><span>${escapeHtml(plan.style)}</span></div>` : ''}
-                    ${plan.notes ? `<div class="fmg-worldbook-meta-row"><span class="fmg-worldbook-meta-label">备注</span><span>${escapeHtml(plan.notes)}</span></div>` : ''}
-                </div>
-                <div class="fmg-edit-card-new">
-                    <div class="fmg-edit-card-label-static">📋 待确认大纲</div>
-                    <div class="fmg-edit-card-new-content">${outlineHtml}</div>
-                </div>
-                <div class="fmg-edit-card-new">
-                    <div class="fmg-edit-card-label-static">✍️ 将发送到生成页的需求</div>
-                    <div class="fmg-edit-card-new-content">${escapeHtml(requestText)}</div>
-                </div>
-                <div class="fmg-edit-card-actions">
-                    <button class="fmg-btn fmg-btn-primary fmg-first-message-plan-apply" data-plan-key="${planKey}">✅ 确认并生成开场白</button>
-                    <button class="fmg-btn fmg-btn-secondary fmg-first-message-plan-ignore" data-plan-key="${planKey}">❌ 忽略</button>
-                </div>
-            </div>
-        `;
-    }
-
-    async function applyFirstMessagePlan(plan, buttonEl) {
-        const requestText = buildFirstMessageRequestFromPlan(plan);
-        if (!requestText) {
-            if (buttonEl) {
-                buttonEl.disabled = false;
-                buttonEl.textContent = '✅ 确认并生成开场白';
-            }
-            showStatus('fmg-discuss-status', 'error', '开场白大纲缺少可发送到生成页的需求');
-            return;
-        }
-
-        const promptInput = document.getElementById('fmg-prompt');
-        if (!promptInput) {
-            showStatus('fmg-discuss-status', 'error', '未找到生成页需求输入框');
-            return;
-        }
-
-        promptInput.value = requestText;
-        switchTab('generate');
-        showStatus('fmg-status', 'loading', '已根据讨论大纲填写需求，正在生成开场白...');
-
-        setTimeout(() => {
-            generateFirstMessage();
-        }, 80);
-    }
-
     function formatEditFieldValue(value) {
         if (value === undefined || value === null || value === '') return '（空）';
         if (typeof value === 'object') {
@@ -3119,7 +2582,7 @@ ${editableEntriesText}
     function renderAssistantContent(content) {
         const blocks = [
             ...parseEditBlocks(content).map(edit => ({ type: 'edit', start: edit.start, end: edit.end, data: edit })),
-            ...parseFirstMessagePlanBlocks(content).map(plan => ({ type: 'first-message-plan', start: plan.start, end: plan.end, data: plan })),
+            ...parseLegacyFirstMessagePlanBlocks(content).map(plan => ({ type: 'legacy-plan', start: plan.start, end: plan.end, data: plan })),
             ...parseWorldbookEntryBlocks(content).map(entry => ({ type: 'worldbook', start: entry.start, end: entry.end, data: entry })),
             ...parsePatchBlocks(content).map(patch => ({ type: 'patch', start: patch.start, end: patch.end, data: patch }))
         ].sort((a, b) => a.start - b.start || a.end - b.end);
@@ -3152,19 +2615,8 @@ ${editableEntriesText}
                 window._fmgPendingEdits[editKey] = { field: edit.field, content: edit.content };
                 editCount++;
                 html += renderEditCard(edit, editKey, cardIndex).trim();
-            } else if (block.type === 'first-message-plan') {
-                const plan = block.data;
-                const planKey = 'first_message_plan_' + (++_firstMessagePlanIdCounter);
-                if (!plan.invalid) {
-                    window._fmgPendingFirstMessagePlans[planKey] = {
-                        title: plan.title,
-                        style: plan.style,
-                        outline: plan.outline,
-                        request: plan.request,
-                        notes: plan.notes
-                    };
-                }
-                html += renderFirstMessagePlanCard(plan, planKey, cardIndex).trim();
+            } else if (block.type === 'legacy-plan') {
+                html += '<div class="fmg-chat-plain">' + escapeHtml(block.data.raw) + '</div>';
             } else if (block.type === 'patch') {
                 const patch = block.data;
                 if (patch.invalid) {
@@ -4364,505 +3816,6 @@ ${editableEntriesText}
         }
     }
 
-    // ========================================
-    // 状态栏生成与应用
-    // ========================================
-
-    // 缓存生成结果
-    window._fmgStatusBarResult = null;
-
-    function updateSbCharName() {
-        const nameEl = document.getElementById('fmg-sb-char-name');
-        const charData = window._fmgCharData;
-        if (nameEl) {
-            if (charData && charData.name) {
-                if (window._fmgCurrentSbCharacterId !== undefined && window._fmgCurrentSbCharacterId !== charData.name) {
-                    clearStatusBar();
-                }
-                window._fmgCurrentSbCharacterId = charData.name;
-                nameEl.textContent = '🎭 ' + charData.name;
-                nameEl.classList.add('active');
-            } else {
-                if (window._fmgCurrentSbCharacterId) clearStatusBar();
-                window._fmgCurrentSbCharacterId = null;
-                nameEl.textContent = '未选择角色';
-                nameEl.classList.remove('active');
-            }
-        }
-    }
-
-    function clearStatusBar() {
-        window._fmgStatusBarResult = null;
-        const promptInput = document.getElementById('fmg-sb-prompt');
-        if (promptInput) promptInput.value = '';
-        const previewArea = document.getElementById('fmg-sb-preview-area');
-        if (previewArea) previewArea.style.display = 'none';
-        
-        const resetEls = ['fmg-sb-visual-content', 'fmg-sb-wi-content', 'fmg-sb-regex-find', 'fmg-sb-regex-replace', 'fmg-sb-regex-trim'];
-        resetEls.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = '等待生成...';
-        });
-        const statusEl = document.getElementById('fmg-sb-status');
-        if (statusEl) statusEl.style.display = 'none';
-    }
-
-    function getStatusBarDesignBrief(styleKey) {
-        const briefs = {
-            director: {
-                name: '自由导演',
-                direction: '根据角色气质、场景和用户需求自行选择最贴切的视觉语言，但必须有清晰层级、克制配色和完整 UI 感。',
-                motifs: '可以自由选择材质、排版和装饰，但所有装饰都必须服务于信息阅读。'
-            },
-            sms: {
-                name: '短信气泡',
-                direction: '像手机短信或聊天通知里的精致状态摘要，轻量、亲密、可读，适合现代、私密、日常叙事。',
-                motifs: '气泡、时间戳、联系人小标签、细分信息条、柔和分隔线。'
-            },
-            dossier: {
-                name: '精致档案卡',
-                direction: '像人物档案、任务简报或机构记录卡，信息密度高但秩序清楚，适合设定复杂的角色。',
-                motifs: '编号、档案头、细线网格、字段组、印章式小标签。'
-            },
-            hud: {
-                name: '玻璃 HUD',
-                direction: '像半透明界面叠层，轻盈、冷静、有空间感，适合科幻、都市、监控或能力状态。',
-                motifs: '半透明面板、细描边、弱发光、坐标式信息组。'
-            },
-            minimal: {
-                name: '极简状态牌',
-                direction: '尽量少的装饰和清楚的排版，用留白、字号层级和细线让状态栏显得高级。',
-                motifs: '单一主标题、两列信息、细分割线、小号注释。'
-            },
-            notebook: {
-                name: '手账纸条',
-                direction: '像角色随身记录、日记摘录或贴纸手账，温柔但不能杂乱，适合生活感与情绪细节。',
-                motifs: '纸张质感、手写感标题、短标签、便签边角、轻微阴影。'
-            },
-            terminal: {
-                name: '赛博终端',
-                direction: '像终端读数、系统监控或黑箱记录，但要精密克制，避免廉价霓虹。',
-                motifs: '等宽小字、扫描线、状态码、低饱和强调色、模块读数。'
-            },
-            ritual: {
-                name: '神秘仪式',
-                direction: '像咒文记录、占卜盘或隐秘档案，氛围感强但结构要清楚，适合奇幻、神秘、恐怖。',
-                motifs: '细边框、符号感分隔、低饱和金属色、铭文式标题、环形或轴线布局。'
-            }
-        };
-
-        const brief = briefs[styleKey] || briefs.director;
-        return `风格方向：${brief.name}
-视觉方向：${brief.direction}
-可借用元素：${brief.motifs}`;
-    }
-
-    function stripMarkdownFence(text) {
-        let cleaned = String(text || '').trim();
-        if (!cleaned.startsWith('```')) return cleaned;
-
-        cleaned = cleaned.replace(/^```(?:json|javascript|js)?\s*/i, '').trim();
-        return cleaned.replace(/\s*```$/i, '').trim();
-    }
-
-    function extractBalancedJsonObject(text) {
-        const source = stripMarkdownFence(text);
-        const start = source.indexOf('{');
-        if (start < 0) return source;
-
-        let depth = 0;
-        let inString = false;
-        let quote = '';
-        let escaped = false;
-
-        for (let i = start; i < source.length; i++) {
-            const ch = source[i];
-            if (inString) {
-                if (escaped) {
-                    escaped = false;
-                } else if (ch === '\\') {
-                    escaped = true;
-                } else if (ch === quote) {
-                    inString = false;
-                    quote = '';
-                }
-                continue;
-            }
-
-            if (ch === '"' || ch === "'") {
-                inString = true;
-                quote = ch;
-                continue;
-            }
-            if (ch === '{') depth++;
-            if (ch === '}') {
-                depth--;
-                if (depth === 0) return source.slice(start, i + 1).trim();
-            }
-        }
-
-        return source.slice(start).trim();
-    }
-
-    function normalizeLooseStatusBarValue(rawValue) {
-        let value = String(rawValue || '').trim();
-        if (value.endsWith(',')) value = value.slice(0, -1).trim();
-
-        const quote = value[0];
-        const hasWrappingQuote = (quote === '"' || quote === "'") && value[value.length - 1] === quote;
-        if (hasWrappingQuote) {
-            value = value.slice(1, -1);
-        }
-
-        return value
-            .replace(/\\n/g, '\n')
-            .replace(/\\r/g, '\r')
-            .replace(/\\t/g, '\t')
-            .replace(/\\"/g, '"')
-            .replace(/\\'/g, "'")
-            .trim();
-    }
-
-    function parseLooseStatusBarResult(text) {
-        const source = extractBalancedJsonObject(text);
-        const fields = ['worldbook_content', 'regex_name', 'regex_find', 'regex_replace', 'regex_trim'];
-        const positions = fields
-            .map(field => {
-                const pattern = new RegExp(`["']?${field}["']?\\s*:`, 'i');
-                const match = pattern.exec(source);
-                return match ? { field, start: match.index, valueStart: match.index + match[0].length } : null;
-            })
-            .filter(Boolean)
-            .sort((a, b) => a.start - b.start);
-
-        if (!positions.length) {
-            throw new Error('未找到状态栏结果字段');
-        }
-
-        const result = {};
-        for (let i = 0; i < positions.length; i++) {
-            const current = positions[i];
-            const next = positions[i + 1];
-            const valueEnd = next ? next.start : source.lastIndexOf('}');
-            const rawValue = source.slice(current.valueStart, valueEnd >= 0 ? valueEnd : undefined);
-            result[current.field] = normalizeLooseStatusBarValue(rawValue);
-        }
-
-        return result;
-    }
-
-    function parseStatusBarResult(text) {
-        const candidate = extractBalancedJsonObject(text);
-        try {
-            return JSON.parse(candidate);
-        } catch (strictError) {
-            const loose = parseLooseStatusBarResult(candidate);
-            if (!loose.worldbook_content || !loose.regex_find || !loose.regex_replace) {
-                throw strictError;
-            }
-            return loose;
-        }
-    }
-
-    async function generateStatusBar() {
-        const promptInput = document.getElementById('fmg-sb-prompt');
-        const userPrompt = promptInput.value.trim();
-
-        if (!userPrompt) {
-            showStatus('fmg-sb-status', 'error', '请描述你想要的状态栏');
-            return;
-        }
-        if (!settings.apiUrl) {
-            showStatus('fmg-sb-status', 'error', '请先在API页面配置API');
-            return;
-        }
-        if (!window._fmgCharData) {
-            showStatus('fmg-sb-status', 'error', '请先选择角色并刷新数据');
-            return;
-        }
-
-        showStatus('fmg-sb-status', 'loading', '正在生成状态栏...');
-        const genBtn = document.getElementById('fmg-sb-generate');
-        if (genBtn) genBtn.disabled = true;
-
-        try {
-            const charData = window._fmgCharData;
-            const worldInfo = getSelectedWorldInfo();
-            const wiText = worldInfo.length > 0
-                ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
-                : '无世界书条目';
-            const styleKey = document.getElementById('fmg-sb-style')?.value || settings.statusBarStyle || 'director';
-            settings.statusBarStyle = styleKey;
-            saveSettings();
-            const designBrief = getStatusBarDesignBrief(styleKey);
-
-            const systemPrompt = `你是一个专业的 SillyTavern 状态栏设计师和前端视觉导演。你的任务不是套模板，而是根据角色气质、用户需求和风格方向，创作一个有审美判断的状态栏 UI。
-
-当前角色: ${charData.name}
-角色描述: ${charData.desc || '（空）'}
-角色性格: ${charData.pers || '（空）'}
-角色场景: ${charData.scen || '（空）'}
-世界书设定: ${wiText}
-
-${designBrief}
-
-你必须返回一个严格的 JSON 对象，不要包含任何其他文字，格式如下:
-{
-  "worldbook_content": "世界书条目的完整内容。除了状态栏模板外，必须在前面包含一段指导大模型输出状态栏的文字指令（例如：请在每次回复的最末尾，根据当前情境输出以下格式的状态栏：）",
-  "regex_name": "状态栏",
-  "regex_find": "用于匹配状态栏 XML 标签的正则表达式",
-  "regex_replace": "用 HTML/CSS 美化的替换代码，将 XML 标签转换为漂亮的状态栏 UI",
-  "regex_trim": "需要修剪掉的标签（每行一个）"
-}
-
-重要规则:
-1. worldbook_content 必须包含指导说明和模板。指导说明必须明确要求在回复末尾输出状态栏；模板必须且只能包含一个 <status_block>...</status_block> 包裹，内部使用 <status>...</status> 定义各个字段
-2. 状态栏字段用 XML 标签如 <title>, <date>, <time>, <location>, <mood> 等。字段数量控制在 5-8 个，必须覆盖核心状态，不要堆太多碎字段
-3. regex_find 必须能匹配整个 status 块的内容，使用捕获组提取各字段，且必须满足以下严格技术约束：
-   - 不要使用 (?s) 或结尾的 /s 标志
-   - 若需匹配包含换行符在内的任意字符，请统一使用 [\\s\\S]*? 代替 .*?
-   - 必须对所有的正斜杠（/）进行反斜杠转义（即写成 \\/）
-   - 请使用非贪婪模式，防止匹配越界
-4. regex_replace 使用 $1, $2 等引用捕获组，生成精美的 HTML/CSS 状态栏。HTML/CSS 必须是一个完整 UI，而不是普通列表
-5. regex_trim 列出需要从显示中移除的标签
-6. CSS 样式必须内联在 HTML 中，默认适配 SillyTavern 深色主题，但可以根据风格方向使用克制的浅色、纸张、玻璃或终端质感
-7. 只输出 JSON，不要有任何额外文字或 markdown 代码块标记
-8. JSON 字符串内部不能出现未转义的真实换行，必须使用 \\n；HTML 属性请优先使用单引号，避免破坏 JSON 字符串
-
-高级设计标准:
-1. 必须有明确的信息层级：主标题/主状态最醒目，时间地点等辅助信息次一级，细节说明最低一级
-2. 必须有一个视觉焦点，不要所有字段同等重量
-3. 使用 CSS 变量组织颜色和间距，例如 --sb-bg、--sb-line、--sb-accent、--sb-muted
-4. 最多使用 2 种强调色，避免彩虹渐变、大面积霓虹、过强发光、廉价金属质感
-5. 不要依赖 emoji 作为主要装饰；如果使用符号，必须少量且符合风格
-6. 排版要适合 320px 宽度：允许换行，不能横向溢出，不能用固定大宽度
-7. 所有字段都要有稳定 class 名，便于后续调整；class 使用 sb- 前缀
-8. 可以有创意布局，但必须保证一眼能读懂当前时间、地点、状态和情绪
-9. 不要输出“黑底+亮边框+几行文字”的低完成度状态栏
-10. 不要把状态栏做成一堆独立小卡片；它应该像一个统一的界面组件
-
-生成前请在内部自检，只有当以下 5 项都达标才输出 JSON：
-- 是否符合所选风格方向而不是泛泛深色卡片
-- 是否像完整 UI 而不是文字列表
-- 是否有清楚的视觉层级和统一配色
-- 是否移动端不溢出
-- 是否世界书模板字段与 regex_find 捕获组完全对应`;
-
-            const userMessage = `请为角色"${charData.name}"生成状态栏，需求如下：\n${userPrompt}`;
-
-            await startChatStream([{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }], {
-                onDone: (finalContent) => {
-                    try {
-                        const result = parseStatusBarResult(finalContent);
-                        window._fmgStatusBarResult = result;
-
-                        // 填充预览区代码
-                        document.getElementById('fmg-sb-wi-content').textContent = result.worldbook_content || '';
-                        document.getElementById('fmg-sb-regex-find').textContent = result.regex_find || '';
-                        document.getElementById('fmg-sb-regex-replace').textContent = result.regex_replace || '';
-                        document.getElementById('fmg-sb-regex-trim').textContent = result.regex_trim || '';
-                        
-                        // 尝试渲染效果预览（不依赖 AI 的正则匹配，而是手动提取标签值填入 HTML 模板）
-                        try {
-                            let previewText = result.worldbook_content || '';
-                            if (result.regex_find && result.regex_replace) {
-                                
-                                // 方案：从 regex_find 提取捕获组对应的 XML 标签名，
-                                // 再从模板中提取这些标签的内容，
-                                // 最后把 $1, $2... 替换进 regex_replace 的 HTML 里。
-                                
-                                // 1. 从 regex_find 中按顺序提取所有捕获组对应的标签名
-                                //    AI 通常写类似 <title>(.*?)</title> 或 <title>([^<]*)</title>
-                                const groupTagPattern = /<(\w+)>\s*\([^)]*\)\s*<\/\1>/g;
-                                const groupTags = [];
-                                let gm;
-                                while ((gm = groupTagPattern.exec(result.regex_find)) !== null) {
-                                    groupTags.push(gm[1]);
-                                }
-                                
-                                // 2. 从模板中提取 <status>...</status> 区块
-                                let statusMatch = previewText.match(/<status[\s>][\s\S]*?<\/status>/i);
-                                let tpl = statusMatch ? statusMatch[0] : previewText;
-                                
-                                // 3. 构建最终 HTML：取 regex_replace，将 $1..$N 替换为对应标签的示例值
-                                let htmlPreview = result.regex_replace;
-                                
-                                if (groupTags.length > 0) {
-                                    for (let i = 0; i < groupTags.length; i++) {
-                                        const tagName = groupTags[i];
-                                        // 从模板提取标签内容
-                                        const tagRe = new RegExp('<' + tagName + '>([\\s\\S]*?)</' + tagName + '>', 'i');
-                                        const tagMatch = tpl.match(tagRe);
-                                        let val = tagMatch ? tagMatch[1].trim() : tagName;
-                                        // 清理 {{变量}} 占位符，替换为示例文字
-                                        val = val.replace(/\{\{([^}]*)\}\}/g, (_, v) => v.trim() || '...');
-                                        // 替换 $1, $2...
-                                        htmlPreview = htmlPreview.replace(new RegExp('\\$' + (i + 1), 'g'), val);
-                                    }
-                                    document.getElementById('fmg-sb-visual-content').innerHTML = htmlPreview;
-                                } else {
-                                    // 如果没提取到捕获组，退而求其次：直接把 $N 替换为示例文字
-                                    htmlPreview = htmlPreview.replace(/\$(\d+)/g, (_, n) => '示例内容' + n );
-                                    document.getElementById('fmg-sb-visual-content').innerHTML = htmlPreview;
-                                }
-                            } else {
-                                document.getElementById('fmg-sb-visual-content').textContent = "需要同时有正则查找和替换才能渲染预览！";
-                            }
-                        } catch (e) {
-                            console.error('[开场白生成器] 预览渲染失败:', e);
-                            document.getElementById('fmg-sb-visual-content').textContent = "预览渲染失败: " + e.message;
-                        }
-
-                        document.getElementById('fmg-sb-preview-area').style.display = '';
-
-                        showStatus('fmg-sb-status', 'success', '生成完成！请预览并应用');
-                    } catch (e) {
-                        console.error('[开场白生成器] 解析状态栏结果失败:', e, finalContent);
-                        showStatus('fmg-sb-status', 'error', '解析生成结果失败，请重试');
-                    }
-                    if (genBtn) genBtn.disabled = false;
-                },
-                onError: (error) => {
-                    showStatus('fmg-sb-status', 'error', '生成失败: ' + error.message);
-                    if (genBtn) genBtn.disabled = false;
-                }
-            }).promise;
-        } catch (e) {
-            showStatus('fmg-sb-status', 'error', '生成失败: ' + e.message);
-            if (genBtn) genBtn.disabled = false;
-        }
-    }
-
-    async function applyStatusBarWorldEntry() {
-        const result = window._fmgStatusBarResult;
-        if (!result || !result.worldbook_content) {
-            showStatus('fmg-sb-status', 'error', '请先生成状态栏');
-            return;
-        }
-
-        try {
-            const context = SillyTavern.getContext();
-            if (context.characterId === undefined) throw new Error('未选择角色');
-
-            const char = context.characters[context.characterId];
-            const worldName = char?.data?.extensions?.world;
-            if (!worldName) throw new Error('角色未关联世界书，请先关联一个世界书');
-            if (typeof context.loadWorldInfo !== 'function' || typeof context.saveWorldInfo !== 'function') {
-                throw new Error('当前 ST 上下文缺少世界书保存接口');
-            }
-
-            const loadedData = await loadWorldInfoDataForSave(context, worldName);
-            const worldEntries = loadedData?.entries ? Object.values(loadedData.entries) : [];
-            const newEntry = createWorldbookEntryShell(worldEntries);
-
-            Object.assign(newEntry, {
-                key: ['状态栏'],
-                keysecondary: [],
-                comment: '状态栏模板',
-                content: result.worldbook_content,
-                constant: true,
-                selective: false,
-                order: 999,
-                position: 4,
-                depth: 0,
-                disable: false,
-                addMemo: true
-            });
-
-            worldEntries.push(newEntry);
-            const finalFormat = {
-                ...(loadedData && typeof loadedData === 'object' ? loadedData : {}),
-                entries: Object.fromEntries(worldEntries.map(entry => [entry.uid, entry]))
-            };
-            await saveWorldInfoNow(context, worldName, finalFormat, newEntry);
-            if (typeof context.reloadWorldInfoEditor === 'function') {
-                context.reloadWorldInfoEditor(worldName, true);
-            }
-
-            showStatus('fmg-sb-status', 'success', '世界书条目已创建！');
-            if (typeof toastr !== 'undefined') toastr.success('状态栏世界书条目已添加');
-
-            // 刷新世界书列表
-            loadWorldInfoList(context, true);
-
-        } catch (e) {
-            console.error('[开场白生成器] 应用世界书条目失败:', e);
-            showStatus('fmg-sb-status', 'error', '应用失败: ' + e.message);
-        }
-    }
-
-    async function applyStatusBarRegex() {
-        const result = window._fmgStatusBarResult;
-        if (!result || !result.regex_find) {
-            showStatus('fmg-sb-status', 'error', '请先生成状态栏');
-            return;
-        }
-
-        try {
-            const context = SillyTavern.getContext();
-            if (context.characterId === undefined) throw new Error('未选择角色');
-
-            const char = context.characters[context.characterId];
-            if (!char) throw new Error('角色数据不存在');
-
-            // 构建正则脚本对象
-            const newScript = {
-                scriptName: result.regex_name || '状态栏',
-                findRegex: result.regex_find,
-                replaceString: result.regex_replace,
-                trimStrings: result.regex_trim ? result.regex_trim.split('\n').filter(s => s.trim()) : [],
-                placement: [2], // 2 = AI输出
-                disabled: false,
-                markdownOnly: true,
-                promptOnly: false,
-                runOnEdit: true,
-                substituteRegex: 0,
-                minDepth: null,
-                maxDepth: null
-            };
-
-            // 获取当前的 regex_scripts
-            const currentScripts = char.data?.extensions?.regex_scripts || [];
-
-            // 检查是否已有同名脚本，如有则替换
-            const existingIdx = currentScripts.findIndex(s => s.scriptName === newScript.scriptName);
-            if (existingIdx >= 0) {
-                currentScripts[existingIdx] = newScript;
-            } else {
-                currentScripts.push(newScript);
-            }
-
-            // 通过 merge-attributes 保存
-            const headers = typeof context.getRequestHeaders === 'function'
-                ? context.getRequestHeaders()
-                : { 'Content-Type': 'application/json' };
-
-            // 更新内存
-            if (!char.data.extensions) char.data.extensions = {};
-            char.data.extensions.regex_scripts = currentScripts;
-
-            const response = await fetch('/api/characters/merge-attributes', {
-                method: 'POST', headers,
-                body: JSON.stringify({
-                    avatar: char.avatar,
-                    data: { extensions: { regex_scripts: currentScripts } }
-                })
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errText}`);
-            }
-
-            showStatus('fmg-sb-status', 'success', '正则脚本已应用！刷新页面后可在局部正则中查看');
-            if (typeof toastr !== 'undefined') toastr.success('状态栏正则脚本已应用');
-
-        } catch (e) {
-            console.error('[开场白生成器] 应用正则脚本失败:', e);
-            showStatus('fmg-sb-status', 'error', '应用失败: ' + e.message);
-        }
-    }
-
     async function sendDiscussMessage() {
         if (isDiscussGenerating) return;
 
@@ -5175,292 +4128,6 @@ ${designBrief}
     }
 
     // ========================================
-    // 生成开场白
-    // ========================================
-
-    // 全局控制器用于中断流式生成
-    let currentAbortController = null;
-
-    async function generateFirstMessage() {
-        const statusEl = document.getElementById('fmg-status');
-        const promptInput = document.getElementById('fmg-prompt');
-        const userPrompt = promptInput.value.trim();
-
-        if (!userPrompt) {
-            showStatus('fmg-status', 'error', '请输入开场白需求描述');
-            return;
-        }
-
-        if (!settings.apiUrl) {
-            showStatus('fmg-status', 'error', '请先在API页面配置API');
-            return;
-        }
-
-        showStatus('fmg-status', 'loading', '正在生成开场白...');
-
-        try {
-            const context = SillyTavern.getContext();
-
-            if (context.characterId === undefined) {
-                showStatus('fmg-status', 'error', '请先选择一个角色');
-                return;
-            }
-
-            const char = context.characters[context.characterId];
-
-            // 收集角色信息
-            const charInfo = [];
-            if (settings.includeDescription && (char.description || char.data?.description)) {
-                charInfo.push(`【描述】\n${char.description || char.data?.description}`);
-            }
-            if (settings.includePersonality && (char.personality || char.data?.personality)) {
-                charInfo.push(`【性格】\n${char.personality || char.data?.personality}`);
-            }
-            if (settings.includeScenario && (char.scenario || char.data?.scenario)) {
-                charInfo.push(`【场景】\n${char.scenario || char.data?.scenario}`);
-            }
-            if (settings.includeCurrentFirstMes && (char.first_mes || char.data?.first_mes)) {
-                charInfo.push(`【当前开场白】\n${char.first_mes || char.data?.first_mes}`);
-            }
-
-            // 收集世界书
-            const worldInfo = getSelectedWorldInfo();
-            const worldInfoText = worldInfo.length > 0
-                ? worldInfo.map(e => `[${e.name}]: ${e.content}`).join('\n\n')
-                : '无选择的世界书条目';
-
-            // 收集预设条目（如果启用）
-            let presetText = '';
-            const incPresetCheckbox = document.getElementById('fmg-inc-preset');
-            if (incPresetCheckbox && incPresetCheckbox.checked) {
-                const presets = getSelectedPresets();
-                if (presets.length > 0) {
-                    presetText = presets.map(p => {
-                        const name = p.name || p.identifier || '未命名';
-                        const content = p.content || p.prompt || '';
-                        return `【${name}】\n${content}`;
-                    }).join('\n\n');
-                }
-            }
-
-            // 构建提示词
-            const prompt = buildPrompt(char.name, charInfo.join('\n\n'), worldInfoText, presetText, userPrompt);
-
-            // 显示流式预览弹窗
-            showStreamPreview();
-
-            // 流式调用API
-            const { controller, promise } = startChatStream([{ role: 'user', content: prompt }], {
-                onChunk: (content) => {
-                    updateStreamPreview(content, false);
-                },
-                onDone: (finalContent) => {
-                    updateStreamPreview(finalContent, true);
-                    showStatus('fmg-status', 'success', '生成完成！请预览并确认');
-                    // 保存到历史记录
-                    saveToHistory(userPrompt, finalContent, char.name);
-                },
-                onError: (error) => {
-                    updateStreamPreviewError(error.message);
-                    showStatus('fmg-status', 'error', '生成失败: ' + error.message);
-                }
-            });
-            currentAbortController = controller;
-            await promise;
-            if (currentAbortController === controller) currentAbortController = null;
-
-        } catch (e) {
-            console.error('[开场白生成器] 生成失败:', e);
-            showStatus('fmg-status', 'error', '生成失败: ' + e.message);
-        }
-    }
-
-    function buildPrompt(charName, charInfo, worldInfo, presetInfo, userRequest) {
-        let presetSection = '';
-        if (presetInfo && presetInfo.trim()) {
-            presetSection = `\n## 预设要求（重要！请严格遵守）\n${presetInfo}\n`;
-        }
-
-        return `你是一个专业的角色扮演开场白撰写助手。请根据以下信息，为角色"${charName}"创作一段开场白。
-
-## 角色信息
-${charInfo || '无'}
-
-## 世界书设定
-${worldInfo}
-${presetSection}
-## 用户需求
-${userRequest}
-
-## 要求
-1. 完全符合角色设定和性格特点
-2. 符合用户描述的风格需求
-3. 语言自然流畅，有沉浸感
-4. 只输出开场白内容本身，不要任何解释、前缀或额外说明`;
-    }
-
-    // ========================================
-    // 预览弹窗
-    // ========================================
-
-    // ========================================
-    // 流式预览弹窗
-    // ========================================
-
-    function showStreamPreview() {
-        const existingPreview = document.getElementById('fmg-preview-modal');
-        if (existingPreview) existingPreview.remove();
-
-        const modal = document.createElement('div');
-        modal.id = 'fmg-preview-modal';
-        modal.innerHTML = `
-            <div class="fmg-preview-overlay"></div>
-            <div class="fmg-preview-content">
-                <div class="fmg-preview-header">
-                    <h4>📝 开场白生成中...</h4>
-                    <button class="fmg-close-btn" id="fmg-preview-close">×</button>
-                </div>
-                <div class="fmg-preview-body">
-                    <div class="fmg-preview-text fmg-streaming" id="fmg-stream-content">
-                        <span class="fmg-cursor">▌</span>
-                    </div>
-                </div>
-                <div class="fmg-preview-footer">
-                    <button class="fmg-btn fmg-btn-danger" id="fmg-stream-stop">⏹ 停止生成</button>
-                    <button class="fmg-btn fmg-btn-primary" id="fmg-preview-apply" disabled>✅ 应用到开场白</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        // 绑定事件
-        document.getElementById('fmg-preview-close').onclick = () => {
-            stopGeneration();
-            closePreview();
-        };
-        document.getElementById('fmg-stream-stop').onclick = stopGeneration;
-        document.getElementById('fmg-preview-apply').onclick = applyFirstMessage;
-    }
-
-    function updateStreamPreview(content, isDone) {
-        const contentEl = document.getElementById('fmg-stream-content');
-        const headerEl = document.querySelector('#fmg-preview-modal .fmg-preview-header h4');
-        const stopBtn = document.getElementById('fmg-stream-stop');
-        const applyBtn = document.getElementById('fmg-preview-apply');
-
-        if (!contentEl) return;
-
-        // 缓存内容
-        window._fmgPendingContent = content;
-
-        if (isDone) {
-            // 生成完成
-            contentEl.innerHTML = escapeHtml(content);
-            contentEl.classList.remove('fmg-streaming');
-            if (headerEl) headerEl.textContent = '📝 开场白预览';
-            if (stopBtn) stopBtn.style.display = 'none';
-            if (applyBtn) applyBtn.disabled = false;
-        } else {
-            // 流式更新中
-            contentEl.innerHTML = escapeHtml(content) + '<span class="fmg-cursor">▌</span>';
-        }
-    }
-
-    function updateStreamPreviewError(errorMsg) {
-        const contentEl = document.getElementById('fmg-stream-content');
-        const headerEl = document.querySelector('#fmg-preview-modal .fmg-preview-header h4');
-        const stopBtn = document.getElementById('fmg-stream-stop');
-
-        if (contentEl) {
-            contentEl.innerHTML = `<span style="color: #ff6464;">❌ 生成失败: ${escapeHtml(errorMsg)}</span>`;
-            contentEl.classList.remove('fmg-streaming');
-        }
-        if (headerEl) headerEl.textContent = '📝 生成失败';
-        if (stopBtn) stopBtn.style.display = 'none';
-    }
-
-    function stopGeneration() {
-        if (currentAbortController) {
-            currentAbortController.abort();
-            currentAbortController = null;
-            console.log('[开场白生成器] 用户中断生成');
-        }
-
-        // 更新UI
-        const stopBtn = document.getElementById('fmg-stream-stop');
-        const applyBtn = document.getElementById('fmg-preview-apply');
-        const headerEl = document.querySelector('#fmg-preview-modal .fmg-preview-header h4');
-        const contentEl = document.getElementById('fmg-stream-content');
-
-        if (stopBtn) stopBtn.style.display = 'none';
-        if (headerEl) headerEl.textContent = '📝 生成已停止';
-        if (contentEl) contentEl.classList.remove('fmg-streaming');
-
-        // 如果有内容，允许应用
-        const content = window._fmgPendingContent;
-        if (content && content.trim() && applyBtn) {
-            applyBtn.disabled = false;
-        }
-
-        showStatus('fmg-status', 'success', '生成已停止');
-    }
-
-    function closePreview() {
-        const preview = document.getElementById('fmg-preview-modal');
-        if (preview) preview.remove();
-        window._fmgPendingContent = null;
-    }
-
-    async function applyFirstMessage() {
-        const content = window._fmgPendingContent;
-        if (!content) return;
-
-        try {
-            const context = SillyTavern.getContext();
-
-            // 检查是否有聊天记录
-            if (!context.chat || context.chat.length === 0) {
-                showStatus('fmg-status', 'error', '当前没有聊天记录');
-                return;
-            }
-
-            // 更新第0楼消息
-            context.chat[0].mes = content;
-
-            // 更新DOM显示
-            const firstMessage = document.querySelector('#chat .mes:first-child .mes_text');
-            if (firstMessage) {
-                // 使用messageFormatting如果可用
-                if (typeof context.messageFormatting === 'function') {
-                    firstMessage.innerHTML = context.messageFormatting(content, context.chat[0].name, context.chat[0].is_user, context.chat[0].is_system, 0);
-                } else {
-                    firstMessage.innerHTML = content.replace(/\n/g, '<br>');
-                }
-            }
-
-            // 保存聊天记录
-            if (typeof context.saveChatDebounced === 'function') {
-                context.saveChatDebounced();
-            } else if (typeof context.saveChat === 'function') {
-                await context.saveChat();
-            }
-
-            showStatus('fmg-status', 'success', '开场白已应用到第0楼！');
-            closePreview();
-            closePopup();
-
-            // 显示toast提示
-            if (typeof toastr !== 'undefined') {
-                toastr.success('第0楼消息已更新');
-            }
-
-        } catch (e) {
-            console.error('[开场白生成器] 应用失败:', e);
-            showStatus('fmg-status', 'error', '应用失败: ' + e.message);
-        }
-    }
-
-    // ========================================
     // API功能
     // ========================================
 
@@ -5580,212 +4247,6 @@ ${userRequest}
         renderApiProfileSelect();
         document.getElementById('fmg-api-profile-name').value = name;
         showStatus('fmg-api-status', 'success', isNew ? `已新建并启用「${name}」` : `「${name}」已保存并启用`);
-    }
-
-    // ========================================
-    // 历史记录功能
-    // ========================================
-
-    function saveToHistory(prompt, content, charName) {
-        if (!settings.firstMessageHistory) {
-            settings.firstMessageHistory = [];
-        }
-
-        const record = {
-            id: Date.now(),
-            prompt: prompt,
-            content: content,
-            charName: charName || '未知角色',
-            timestamp: new Date().toLocaleString('zh-CN')
-        };
-
-        // 插入到最前面
-        settings.firstMessageHistory.unshift(record);
-
-        // 最多保留5条
-        if (settings.firstMessageHistory.length > 5) {
-            settings.firstMessageHistory = settings.firstMessageHistory.slice(0, 5);
-        }
-
-        saveSettings();
-        renderHistoryList();
-    }
-
-    function renderHistoryList() {
-        const section = document.getElementById('fmg-history-section');
-        const listEl = document.getElementById('fmg-history-list');
-        const countEl = document.getElementById('fmg-history-count');
-        const allHistory = settings.firstMessageHistory || [];
-
-        if (!section || !listEl) return;
-
-        // 获取当前角色名，按角色过滤
-        const currentCharName = window._fmgCharData ? window._fmgCharData.name : null;
-        const history = currentCharName
-            ? allHistory.filter(r => r.charName === currentCharName)
-            : [];
-
-        if (history.length === 0) {
-            section.style.display = 'none';
-            return;
-        }
-
-        section.style.display = '';
-        if (countEl) countEl.textContent = `${history.length}/5`;
-
-        listEl.innerHTML = history.map((record) => {
-            // 找到该记录在完整列表中的真实 index
-            const realIndex = allHistory.indexOf(record);
-            const promptPreview = (record.prompt || '').substring(0, 40) + (record.prompt && record.prompt.length > 40 ? '...' : '');
-            const contentPreview = (record.content || '').substring(0, 60) + (record.content && record.content.length > 60 ? '...' : '');
-            return `
-                <div class="fmg-history-card" data-history-index="${realIndex}">
-                    <div class="fmg-history-card-header">
-                        <span class="fmg-history-char">${escapeHtml(record.charName || '')}</span>
-                        <span class="fmg-history-time">${escapeHtml(record.timestamp || '')}</span>
-                    </div>
-                    <div class="fmg-history-card-body">
-                        <div class="fmg-history-prompt-preview">📝 ${escapeHtml(promptPreview)}</div>
-                        <div class="fmg-history-content-preview">${escapeHtml(contentPreview)}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    function showHistoryDetail(index) {
-        const history = settings.firstMessageHistory || [];
-        if (index < 0 || index >= history.length) return;
-
-        const record = history[index];
-
-        // 移除已存在的弹窗
-        const existing = document.getElementById('fmg-history-detail-modal');
-        if (existing) existing.remove();
-
-        const modal = document.createElement('div');
-        modal.id = 'fmg-history-detail-modal';
-        modal.innerHTML = `
-            <div class="fmg-preview-overlay"></div>
-            <div class="fmg-preview-content fmg-history-detail-content">
-                <div class="fmg-preview-header">
-                    <h4>📜 历史记录详情</h4>
-                    <button class="fmg-close-btn" id="fmg-history-detail-close">×</button>
-                </div>
-                <div class="fmg-preview-body">
-                    <div class="fmg-history-detail-meta">
-                        <span class="fmg-history-detail-char">🎭 ${escapeHtml(record.charName || '未知角色')}</span>
-                        <span class="fmg-history-detail-time">🕐 ${escapeHtml(record.timestamp || '')}</span>
-                    </div>
-                    <div class="fmg-history-detail-section">
-                        <div class="fmg-history-detail-label">📝 开场白需求</div>
-                        <div class="fmg-history-detail-text fmg-history-prompt-text">${escapeHtml(record.prompt || '')}</div>
-                    </div>
-                    <div class="fmg-history-detail-section">
-                        <div class="fmg-history-detail-label">✨ 生成的开场白</div>
-                        <div class="fmg-history-detail-text fmg-history-content-text">${escapeHtml(record.content || '')}</div>
-                    </div>
-                </div>
-                <div class="fmg-preview-footer">
-                    <button class="fmg-btn fmg-btn-danger-small fmg-btn" id="fmg-history-delete" data-index="${index}">🗑️ 删除</button>
-                    <button class="fmg-btn fmg-btn-primary" id="fmg-history-apply" data-index="${index}">✅ 应用到新的开场白</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        // 绑定事件
-        document.getElementById('fmg-history-detail-close').onclick = () => modal.remove();
-        modal.querySelector('.fmg-preview-overlay').onclick = () => modal.remove();
-
-        document.getElementById('fmg-history-apply').onclick = () => {
-            applyHistoryToFirstMessage(index);
-            modal.remove();
-        };
-
-        document.getElementById('fmg-history-delete').onclick = () => {
-            deleteHistoryRecord(index);
-            modal.remove();
-        };
-    }
-
-    async function applyHistoryToFirstMessage(index) {
-        const history = settings.firstMessageHistory || [];
-        if (index < 0 || index >= history.length) return;
-
-        const record = history[index];
-        const content = record.content;
-        if (!content) return;
-
-        try {
-            const context = SillyTavern.getContext();
-
-            if (!context.chat || context.chat.length === 0) {
-                showStatus('fmg-status', 'error', '当前没有聊天记录');
-                return;
-            }
-
-            // 更新第0楼消息
-            context.chat[0].mes = content;
-
-            // 更新DOM显示
-            const firstMessage = document.querySelector('#chat .mes:first-child .mes_text');
-            if (firstMessage) {
-                if (typeof context.messageFormatting === 'function') {
-                    firstMessage.innerHTML = context.messageFormatting(content, context.chat[0].name, context.chat[0].is_user, context.chat[0].is_system, 0);
-                } else {
-                    firstMessage.innerHTML = content.replace(/\n/g, '<br>');
-                }
-            }
-
-            // 保存聊天记录
-            if (typeof context.saveChatDebounced === 'function') {
-                context.saveChatDebounced();
-            } else if (typeof context.saveChat === 'function') {
-                await context.saveChat();
-            }
-
-            showStatus('fmg-status', 'success', '历史开场白已应用到第0楼！');
-            closePopup();
-
-            if (typeof toastr !== 'undefined') {
-                toastr.success('历史开场白已应用到第0楼');
-            }
-
-        } catch (e) {
-            console.error('[开场白生成器] 应用历史记录失败:', e);
-            showStatus('fmg-status', 'error', '应用失败: ' + e.message);
-        }
-    }
-
-    function deleteHistoryRecord(index) {
-        const history = settings.firstMessageHistory || [];
-        if (index < 0 || index >= history.length) return;
-
-        history.splice(index, 1);
-        settings.firstMessageHistory = history;
-        saveSettings();
-        renderHistoryList();
-
-        if (typeof toastr !== 'undefined') {
-            toastr.info('历史记录已删除');
-        }
-    }
-
-    function clearAllHistory() {
-        const currentCharName = window._fmgCharData ? window._fmgCharData.name : null;
-        if (!currentCharName) return;
-
-        // 只清除当前角色的记录
-        settings.firstMessageHistory = (settings.firstMessageHistory || []).filter(
-            r => r.charName !== currentCharName
-        );
-        saveSettings();
-        renderHistoryList();
-
-        if (typeof toastr !== 'undefined') {
-            toastr.info(`已清除 ${currentCharName} 的历史记录`);
-        }
     }
 
     // ========================================

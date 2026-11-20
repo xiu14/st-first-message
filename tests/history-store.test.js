@@ -29,7 +29,7 @@ function loadWithFiles({ extensionSettings = {}, fileContent = null, readStatus 
     return { ...env, files, stored: () => env.context.extensionSettings['first-message-generator'] };
 }
 
-test('首次运行把 settings 里的会话和开场白历史迁移到文件，并从 settings 删掉', async () => {
+test('首次运行把 settings 里的会话迁移到文件，并从 settings 删掉', async () => {
     const env = loadWithFiles({
         extensionSettings: {
             'first-message-generator': {
@@ -40,11 +40,13 @@ test('首次运行把 settings 里的会话和开场白历史迁移到文件，�
             }
         }
     });
+    env.fmg('loadSettings()');
     await env.fmg('loadHistoryStore()');
 
     const file = JSON.parse(env.files.content);
     assert.equal(file.discussSessionHistory[0].messages[0].content, '中文内容');
-    assert.equal(file.firstMessageHistory[0].content, '开场白');
+    // 开场白生成页已移除，它的历史不再保存
+    assert.ok(!('firstMessageHistory' in file));
 
     const stored = env.stored();
     assert.equal(stored.temperature, 0.5);
@@ -57,15 +59,26 @@ test('首次运行把 settings 里的会话和开场白历史迁移到文件，�
 
 test('已有历史文件时直接读取，不重复写入', async () => {
     const env = loadWithFiles({
-        fileContent: { version: 1, discussSessionHistory: [session('s1', 10)], firstMessageHistory: [] }
+        fileContent: { version: 1, discussSessionHistory: [session('s1', 10)] }
     });
     await env.fmg('loadHistoryStore()');
     assert.equal(env.fmg('settings.discussSessionHistory[0].id'), 's1');
     assert.equal(env.files.uploads, 0);
 });
 
+test('历史文件里旧的开场白历史会被清掉，讨论会话保留', async () => {
+    const env = loadWithFiles({
+        fileContent: { version: 1, discussSessionHistory: [session('s1', 10)], firstMessageHistory: [{ id: 1, content: '旧开场白' }] }
+    });
+    await env.fmg('loadHistoryStore()');
+    const file = JSON.parse(env.files.content);
+    assert.deepEqual(Object.keys(file), ['version', 'discussSessionHistory']);
+    assert.equal(file.discussSessionHistory[0].id, 's1');
+    assert.equal(env.files.uploads, 1);
+});
+
 test('之后的改动只写历史文件，不进 settings', async () => {
-    const env = loadWithFiles({ fileContent: { version: 1, discussSessionHistory: [], firstMessageHistory: [] } });
+    const env = loadWithFiles({ fileContent: { version: 1, discussSessionHistory: [] } });
     await env.fmg('loadHistoryStore()');
     env.fmg(`settings.discussSessionHistory.unshift(${JSON.stringify(session('s2', 20))}); saveSettings()`);
     await flush(700);
@@ -79,7 +92,7 @@ test('settings 和文件里都有记录时按 id 合并，保留较新的', asyn
         extensionSettings: {
             'first-message-generator': { discussSessionHistory: [session('s1', 30, '新'), session('s3', 5)] }
         },
-        fileContent: { version: 1, discussSessionHistory: [session('s1', 10, '旧'), session('s2', 20)], firstMessageHistory: [] }
+        fileContent: { version: 1, discussSessionHistory: [session('s1', 10, '旧'), session('s2', 20)] }
     });
     await env.fmg('loadHistoryStore()');
 

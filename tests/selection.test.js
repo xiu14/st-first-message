@@ -5,7 +5,7 @@ const { loadExtension } = require('./harness');
 async function openModal() {
     const env = loadExtension();
     await env.fmg('loadCharacterData()');
-    env.document.getElementById('fmg-wi-open').click();
+    env.document.getElementById('fmg-discuss-wi-open').click();
     const modal = env.document.getElementById('fmg-selection-modal');
     assert.ok(modal);
     return { env, modal };
@@ -40,7 +40,7 @@ const groupingSettings = () => ({
 async function openGroupedModal() {
     const env = loadExtension({ extensionSettings: groupingSettings() });
     await env.fmg('loadCharacterData()');
-    env.document.getElementById('fmg-wi-open').click();
+    env.document.getElementById('fmg-discuss-wi-open').click();
     return { env, modal: env.document.getElementById('fmg-selection-modal') };
 }
 

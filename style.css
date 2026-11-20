@@ -133,92 +133,6 @@
     display: block;
 }
 
-/* 区块 */
-.fmg-section {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 12px;
-}
-
-.fmg-section>label {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--SmartThemeBodyColor, #ccc);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.fmg-section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.fmg-section-header h4 {
-    margin: 0;
-    font-size: 13px;
-    color: var(--SmartThemeBodyColor, #ccc);
-}
-
-.fmg-char-name {
-    font-size: 12px;
-    color: var(--fmg-muted);
-    padding: 2px 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-}
-
-.fmg-char-name.active {
-    color: var(--fmg-teal);
-    background: rgba(100, 255, 218, 0.1);
-}
-
-/* 复选框组 */
-.fmg-checkbox-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 16px;
-}
-
-.fmg-checkbox-group label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: var(--SmartThemeBodyColor, #ccc);
-    cursor: pointer;
-}
-
-/* 数据预览 */
-.fmg-data-preview {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.fmg-tag-ok {
-    display: inline-block;
-    padding: 2px 6px;
-    font-size: 10px;
-    background: rgba(100, 255, 150, 0.15);
-    color: var(--fmg-green);
-    border-radius: 3px;
-    margin-right: 4px;
-}
-
-.fmg-tag-empty {
-    display: inline-block;
-    padding: 2px 6px;
-    font-size: 10px;
-    background: rgba(255, 100, 100, 0.1);
-    color: var(--fmg-muted);
-    border-radius: 3px;
-    margin-right: 4px;
-}
-
 /* 按钮组 */
 .fmg-btn-group {
     display: flex;
@@ -260,30 +174,6 @@
     white-space: nowrap;
 }
 
-/* 世界书列表 */
-.fmg-wi-list {
-    max-height: 100px;
-    overflow-y: auto;
-    font-size: 12px;
-}
-
-.fmg-wi-item {
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.fmg-wi-item:last-child {
-    border-bottom: none;
-}
-
-.fmg-wi-item label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    color: var(--SmartThemeBodyColor, #ccc);
-}
-
 .fmg-badge {
     display: inline-block;
     padding: 1px 5px;
@@ -302,25 +192,6 @@
     color: var(--fmg-red);
     border-radius: 3px;
     margin-left: 4px;
-}
-
-/* 输入框 */
-.fmg-textarea {
-    width: 100%;
-    min-height: 80px;
-    padding: 10px;
-    background: var(--SmartThemeBlurTintColor, #151528);
-    border: 1px solid var(--SmartThemeBorderColor, #444);
-    border-radius: 6px;
-    color: var(--SmartThemeBodyColor, #fff);
-    font-size: 13px;
-    resize: vertical;
-    font-family: inherit;
-}
-
-.fmg-textarea:focus {
-    outline: none;
-    border-color: var(--SmartThemeQuoteColor, #7c7cff);
 }
 
 /* 按钮 */
@@ -448,103 +319,6 @@
 }
 
 /* ========================================
-   预览弹窗
-   ======================================== */
-
-#fmg-preview-modal,
-#fmg-history-detail-modal {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    z-index: 100001 !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.fmg-preview-overlay {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(3px);
-    z-index: 0;
-}
-
-.fmg-preview-content {
-    position: relative;
-    width: 700px;
-    max-width: 95vw;
-    background: var(--SmartThemeBlurTintColor, #1a1a2e);
-    border: 1px solid var(--SmartThemeBorderColor, #444);
-    border-radius: 12px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: visible !important;
-    z-index: 1;
-}
-
-.fmg-preview-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 18px;
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    flex-shrink: 0 !important;
-    border-radius: 12px 12px 0 0;
-}
-
-.fmg-preview-header h4 {
-    margin: 0;
-    color: var(--fmg-text);
-    font-size: 15px;
-    transition: all 0.3s ease;
-}
-
-.fmg-preview-body {
-    flex: 0 1 auto !important;
-    padding: 16px;
-    overflow-y: auto !important;
-    max-height: calc(80vh - 120px) !important;
-}
-
-.fmg-preview-text {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-    padding: 14px;
-    font-size: 14px;
-    line-height: 1.7;
-    color: var(--SmartThemeBodyColor, #ddd);
-    white-space: pre-wrap;
-    border-left: 3px solid #64ffda;
-}
-
-.fmg-preview-footer {
-    padding: 12px 18px;
-    background: rgba(0, 0, 0, 0.2);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    flex-shrink: 0 !important;
-    border-radius: 0 0 12px 12px;
-}
-
-/* ========================================
    移动端适配
    ======================================== */
 
@@ -582,9 +356,7 @@
         font-size: 12px;
     }
 
-    .fmg-textarea {
-        font-size: 16px;
-    }
+    
 
     .fmg-form-group input,
     .fmg-form-group select {
@@ -596,30 +368,13 @@
     }
 
     /* 预览弹窗移动端 - 非全屏居中模式 */
-    .fmg-preview-content {
-        position: relative !important;
-        width: 95vw !important;
-        max-width: 95vw !important;
-        max-height: 85vh !important;
-        max-height: 85dvh !important;
-        border-radius: 12px !important;
-    }
+    
 
-    .fmg-preview-body {
-        max-height: calc(85vh - 130px) !important;
-        max-height: calc(85dvh - 130px) !important;
-        flex: 0 1 auto !important;
-        -webkit-overflow-scrolling: touch;
-    }
+    
 
-    .fmg-preview-header {
-        border-radius: 12px 12px 0 0 !important;
-    }
+    
 
-    .fmg-preview-footer {
-        border-radius: 0 0 12px 12px !important;
-        padding-bottom: 12px !important;
-    }
+    
 
     /* 选择弹窗移动端 - 非全屏居中模式 */
     .fmg-select-content {
@@ -652,94 +407,12 @@
    选择弹窗样式
    ======================================== */
 
-/* 紧凑区块 */
-.fmg-section-compact {
-    padding: 8px 12px;
-}
-
-.fmg-section-compact .fmg-section-header {
-    margin-bottom: 0;
-}
-
 .fmg-count {
     font-size: 11px;
     color: var(--SmartThemeQuoteColor, #888);
     padding: 2px 6px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
-}
-
-.fmg-template-section {
-    margin-top: 8px;
-}
-
-.fmg-template-grid {
-    display: flex;
-    gap: 10px;
-}
-
-.fmg-template-chip {
-    flex: 1;
-    min-width: 0;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(100, 200, 255, 0.16);
-    border-radius: 8px;
-    color: var(--SmartThemeBodyColor, #e8f4ff);
-    font-size: 12px;
-    line-height: 1.5;
-    cursor: pointer;
-    user-select: none;
-    transition: border-color 0.2s, background 0.2s, transform 0.15s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fmg-template-chip:hover {
-    border-color: rgba(100, 200, 255, 0.35);
-    background: rgba(100, 200, 255, 0.08);
-    transform: translateY(-1px);
-}
-
-.fmg-template-chip.fixed,
-.fmg-template-chip-fixed {
-    border-color: rgba(100, 200, 255, 0.28);
-    color: var(--fmg-blue);
-}
-
-.fmg-template-chip.empty {
-    color: var(--fmg-muted);
-    border-style: dashed;
-}
-
-.fmg-template-chip.editing {
-    padding: 6px 8px;
-    background: rgba(100, 200, 255, 0.08);
-    border-color: rgba(100, 200, 255, 0.4);
-    cursor: text;
-    transform: none;
-}
-
-.fmg-template-chip-input {
-    width: 100%;
-    padding: 6px 8px;
-    background: var(--SmartThemeBlurTintColor, #151528);
-    border: 1px solid var(--SmartThemeBorderColor, #444);
-    border-radius: 6px;
-    color: var(--SmartThemeBodyColor, #fff);
-    font-size: 12px;
-    outline: none;
-}
-
-.fmg-template-chip-input:focus {
-    border-color: var(--SmartThemeQuoteColor, #7c7cff);
-}
-
-.fmg-template-presets {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
 }
 
 .fmg-btn-open {
@@ -957,11 +630,6 @@
     color: var(--fmg-green);
 }
 
-.fmg-badge-role {
-    background: rgba(100, 200, 255, 0.2);
-    color: var(--fmg-blue);
-}
-
 .fmg-select-footer {
     display: flex;
     justify-content: space-between;
@@ -1015,7 +683,7 @@
 }
 
 /* ========================================
-   流式生成样式
+   流式输出样式
    ======================================== */
 
 /* 打字光标动画 */
@@ -1029,11 +697,6 @@
 @keyframes fmg-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
-}
-
-/* 流式生成中的预览文本 */
-.fmg-preview-text.fmg-streaming {
-    min-height: 100px;
 }
 
 /* 停止生成按钮 */
@@ -1290,7 +953,6 @@
 /* 卡片 HTML 模板里的换行和缩进不能按 pre-wrap 显示成空白；卡片内正文区单独设置了 pre-wrap */
 .fmg-chat-text .fmg-edit-card,
 .fmg-chat-text .fmg-worldbook-card,
-.fmg-chat-text .fmg-first-message-plan-card,
 .fmg-chat-text .fmg-chat-apply-all-bar {
     white-space: normal;
 }
@@ -1346,17 +1008,6 @@
     padding: 10px 18px !important;
     height: 40px;
     border-radius: 8px !important;
-}
-
-.fmg-discuss-history-section {
-    margin-bottom: 8px;
-}
-
-.fmg-discuss-history-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
 }
 
 .fmg-discuss-history-empty {
@@ -1464,12 +1115,6 @@
     margin-bottom: 8px;
 }
 
-.fmg-discuss-session-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
 /* 移动端适配 - 讨论页 */
 @media (max-width: 768px) {
     .fmg-discuss-container {
@@ -1498,9 +1143,7 @@
         justify-content: flex-start;
     }
 
-    .fmg-template-grid {
-        flex-direction: column;
-    }
+    
 }
 
 /* 手机端聊天专注模式：只压缩讨论页的顶部，不影响普通模式的信息区。 */
@@ -1860,50 +1503,6 @@
     border-bottom: none;
 }
 
-.fmg-first-message-plan-card {
-    background: rgba(100, 180, 255, 0.06);
-    border: 1px solid rgba(100, 180, 255, 0.25);
-    border-radius: 10px;
-    margin: 8px 0;
-    overflow: hidden;
-    transition: border-color 0.3s, opacity 0.3s;
-}
-
-.fmg-first-message-plan-card.invalid {
-    border-color: rgba(255, 180, 100, 0.28);
-    background: rgba(255, 180, 100, 0.06);
-}
-
-.fmg-first-message-plan-card.ignored {
-    opacity: 0.5;
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.fmg-first-message-plan-header {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    background: rgba(100, 180, 255, 0.12);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--fmg-blue);
-    border-bottom: 1px solid rgba(100, 180, 255, 0.15);
-}
-
-.fmg-first-message-outline {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.fmg-first-message-outline li {
-    margin: 3px 0;
-}
-
-.fmg-first-message-empty {
-    color: var(--fmg-muted);
-}
-
 .fmg-edit-ignored-badge {
     display: inline-flex;
     align-items: center;
@@ -2069,251 +1668,4 @@
     .fmg-worldbook-control-row {
         grid-template-columns: 52px minmax(0, 1fr);
     }
-}
-
-/* ========================================
-   状态栏页样式
-   ======================================== */
-
-.fmg-sb-container {
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    gap: 12px;
-}
-
-.fmg-sb-style-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-.fmg-sb-style-row label {
-    flex: 0 0 auto;
-    margin: 0;
-    font-size: 12px;
-    color: var(--SmartThemeBodyColor, #ccc);
-}
-
-.fmg-sb-style-select {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--SmartThemeBorderColor, #444);
-    background: var(--SmartThemeBlurTintColor, #151528);
-    color: var(--SmartThemeBodyColor, #fff);
-    font-size: 12px;
-}
-
-.fmg-sb-style-select:focus {
-    outline: none;
-    border-color: var(--SmartThemeQuoteColor, #7c7cff);
-}
-
-.fmg-sb-preview-section {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    margin-top: 10px;
-    overflow: hidden;
-}
-
-.fmg-sb-preview-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--SmartThemeBodyColor, #ccc);
-    user-select: none;
-    transition: background 0.15s;
-}
-
-.fmg-sb-preview-header:hover {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.fmg-sb-preview-body {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-}
-
-.fmg-sb-preview-body.open {
-    max-height: 500px;
-    overflow-y: auto;
-}
-
-.fmg-sb-code {
-    margin: 0;
-    padding: 10px 12px;
-    background: rgba(0, 0, 0, 0.3);
-    color: var(--fmg-purple);
-    font-size: 11px;
-    font-family: monospace;
-    white-space: pre-wrap;
-    word-break: break-all;
-}
-
-.fmg-sb-code-large {
-    color: var(--fmg-teal);
-    max-height: 150px;
-    overflow-y: auto;
-}
-
-.fmg-sb-visual-content {
-    padding: 15px;
-    background: #111;
-    border-radius: 6px;
-    margin: 10px;
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
-    color: #fff;
-    min-height: 50px;
-    font-size: 14px;
-}
-
-.fmg-sb-regex-field {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.fmg-sb-regex-field label {
-    display: block;
-    padding: 6px 12px;
-    font-size: 11px;
-    color: var(--fmg-muted);
-    background: rgba(0, 0, 0, 0.1);
-}
-
-/* ========================================
-   历史记录区域样式
-   ======================================== */
-
-.fmg-history-section {
-    margin-top: 12px;
-}
-
-.fmg-history-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-}
-
-.fmg-history-card {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s, transform 0.15s;
-}
-
-.fmg-history-card:hover {
-    border-color: rgba(100, 200, 255, 0.25);
-    background: rgba(0, 0, 0, 0.3);
-    transform: translateY(-1px);
-}
-
-.fmg-history-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-}
-
-.fmg-history-char {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--fmg-blue);
-}
-
-.fmg-history-time {
-    font-size: 10px;
-    color: var(--fmg-muted);
-}
-
-.fmg-history-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.fmg-history-prompt-preview {
-    font-size: 11px;
-    color: var(--fmg-teal);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.fmg-history-content-preview {
-    font-size: 11px;
-    color: var(--fmg-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* 历史记录详情弹窗 */
-.fmg-history-detail-content {
-    max-width: 600px;
-}
-
-.fmg-history-detail-meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 6px;
-    margin-bottom: 10px;
-}
-
-.fmg-history-detail-char {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--fmg-blue);
-}
-
-.fmg-history-detail-time {
-    font-size: 11px;
-    color: var(--fmg-muted);
-}
-
-.fmg-history-detail-section {
-    margin-bottom: 10px;
-}
-
-.fmg-history-detail-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--fmg-teal);
-    margin-bottom: 4px;
-    padding: 4px 0;
-}
-
-.fmg-history-detail-text {
-    padding: 8px 12px;
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: 6px;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--SmartThemeBodyColor, #ccc);
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.fmg-history-prompt-text {
-    border-left: 3px solid rgba(100, 255, 218, 0.4);
-}
-
-.fmg-history-content-text {
-    border-left: 3px solid rgba(124, 124, 255, 0.4);
-    max-height: 300px;
 }

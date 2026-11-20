@@ -124,11 +124,12 @@ test('事件：ST 页面上的 change 事件不会触发插件保存设置', asy
     outside.dispatchEvent(new env.window.Event('change', { bubbles: true }));
     assert.equal(saves, 0);
 
-    const inside = env.document.getElementById('fmg-inc-desc');
-    inside.checked = false;
+    env.fmg(`settings.apiProfiles = [{ id: 'p1', name: '方案一', apiType: 'openai', apiUrl: 'http://x', apiKey: '', model: 'm', models: ['m'] }]; renderApiProfileSelect();`);
+    const inside = env.document.getElementById('fmg-api-profile');
+    inside.value = 'p1';
     inside.dispatchEvent(new env.window.Event('change', { bubbles: true }));
     assert.equal(saves, 1);
-    assert.equal(env.fmg('settings.includeDescription'), false);
+    assert.equal(env.fmg('settings.activeApiProfileId'), 'p1');
 });
 
 test('事件：生成中点停止不会把输入框里的新内容发出去', async () => {
@@ -213,4 +214,17 @@ test('卡片的应用/忽略状态在重新渲染和切换会话后保留', asyn
     fmg('renderDiscussionHistory()');
     assert.match(document.querySelector('.fmg-chat-apply-all-bar').textContent, /已全部处理/);
     assert.equal(document.querySelector('.fmg-chat-apply-all'), null);
+});
+
+test('旧会话里的开场白大纲块按原文显示，之后卡片的已应用状态不错位', async () => {
+    const { document, fmg } = await openWithCharacter();
+    const plan = '[FIRST_MESSAGE_PLAN]\n{"title":"大纲","request":"写一个开场白"}\n[/FIRST_MESSAGE_PLAN]';
+    const content = `${plan}\n[EDIT:description]新描述[/EDIT]`;
+    // 卡片序号 1 是大纲，2 是修改卡片
+    fmg(`discussMessages = [createChatMessage('user', '问'), Object.assign(createChatMessage('assistant', ${JSON.stringify(content)}), { cardStates: { 2: 'applied' } })]; renderDiscussionHistory();`);
+
+    assert.match(document.querySelector('.fmg-chat-plain').textContent, /FIRST_MESSAGE_PLAN/);
+    const card = document.querySelector('.fmg-edit-card');
+    assert.equal(card.dataset.cardIndex, '2');
+    assert.ok(card.classList.contains('applied'));
 });
