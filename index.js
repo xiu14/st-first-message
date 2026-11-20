@@ -511,18 +511,21 @@
                             </div>
                         </div>
                         
-                        <div class="fmg-chat-messages" id="fmg-chat-messages">
-                            <div class="fmg-chat-welcome">
-                                <div class="fmg-chat-welcome-icon">💬</div>
-                                <div>选择角色后，可以在这里讨论角色卡和世界书设定</div>
-                                <div style="font-size:11px;color:#888;margin-top:4px;">需要沉淀设定时，直接要求 AI 输出世界书条目即可一键添加</div>
+                        <!-- 提示浮在聊天区底部，不占布局高度 -->
+                        <div class="fmg-chat-messages-wrap">
+                            <div class="fmg-chat-messages" id="fmg-chat-messages">
+                                <div class="fmg-chat-welcome">
+                                    <div class="fmg-chat-welcome-icon">💬</div>
+                                    <div>选择角色后，可以在这里讨论角色卡和世界书设定</div>
+                                    <div style="font-size:11px;color:#888;margin-top:4px;">需要沉淀设定时，直接要求 AI 输出世界书条目即可一键添加</div>
+                                </div>
                             </div>
+                            <div id="fmg-discuss-status" class="fmg-status fmg-status-toast" style="display: none;" title="点击关闭"></div>
                         </div>
                         <div class="fmg-chat-input-area">
                             <textarea id="fmg-discuss-input" class="fmg-chat-input" placeholder="输入消息讨论角色卡、修改字段，或要求 AI 输出世界书条目..." rows="2"></textarea>
                             <button class="fmg-btn fmg-btn-primary fmg-chat-send" id="fmg-discuss-send">发送</button>
                         </div>
-                        <div id="fmg-discuss-status" class="fmg-status" style="display: none;"></div>
                     </div>
                 </div>
 
@@ -778,6 +781,7 @@
         ['.fmg-edit-ignore, .fmg-worldbook-ignore', (el) => {
             setCardState(el.closest('.fmg-edit-card, .fmg-worldbook-card'), 'ignored');
         }],
+        ['.fmg-status-toast', (el) => hideStatus(el.id)],
         ['.fmg-edit-card-old .fmg-edit-card-label', (el) => toggleCollapse(el, el.nextElementSibling)],
         ['.fmg-collapse-header', (el) => toggleCollapse(el, document.getElementById(el.dataset.target))]
     ];
@@ -3910,8 +3914,7 @@ ${editableEntriesText}
         requestDiscussTokenCountUpdate();
         renderChatSessionControls();
 
-        const statusEl = document.getElementById('fmg-discuss-status');
-        if (statusEl) statusEl.style.display = 'none';
+        hideStatus('fmg-discuss-status');
     }
 
     // ========================================
@@ -4232,17 +4235,34 @@ ${editableEntriesText}
     // 工具函数
     // ========================================
 
+    // 浮动提示（讨论页）自动消失的时间；loading 一直显示，直到被下一条替换
+    const STATUS_TOAST_DURATION = { success: 2500, error: 6000 };
+    const statusToastTimers = {};
+
+    function hideStatus(elementId) {
+        clearTimeout(statusToastTimers[elementId]);
+        const el = document.getElementById(elementId);
+        if (el) el.style.display = 'none';
+    }
+
     function showStatus(elementId, type, message) {
         const el = document.getElementById(elementId);
         if (!el) return;
 
+        const isToast = el.classList.contains('fmg-status-toast');
         el.style.display = 'block';
-        el.className = 'fmg-status ' + type;
+        el.className = 'fmg-status ' + (isToast ? 'fmg-status-toast ' : '') + type;
 
         if (type === 'loading') {
-            el.innerHTML = '<span class="fmg-loading"></span>' + message;
+            el.innerHTML = '<span class="fmg-loading"></span>' + escapeHtml(message);
         } else {
             el.textContent = message;
+        }
+
+        if (isToast) {
+            clearTimeout(statusToastTimers[elementId]);
+            const duration = STATUS_TOAST_DURATION[type];
+            if (duration) statusToastTimers[elementId] = setTimeout(() => hideStatus(elementId), duration);
         }
     }
 

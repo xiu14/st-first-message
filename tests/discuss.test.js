@@ -265,3 +265,27 @@ test('旧会话里的开场白大纲块按原文显示，之后卡片的已应�
     assert.equal(card.dataset.cardIndex, '2');
     assert.ok(card.classList.contains('applied'));
 });
+
+test('讨论页提示浮在聊天区上：成功提示自动消失，点击可关闭，加载提示不自动消失', async () => {
+    const { document, fmg } = await openWithCharacter();
+    const status = document.getElementById('fmg-discuss-status');
+    assert.ok(status.parentElement.classList.contains('fmg-chat-messages-wrap'), '提示和聊天区在同一个定位容器里，不占输入框上下的空间');
+
+    fmg(`STATUS_TOAST_DURATION.success = 30; STATUS_TOAST_DURATION.error = 30;`);
+    fmg(`showStatus('fmg-discuss-status', 'success', '已进入会话')`);
+    assert.equal(status.style.display, 'block');
+    assert.ok(status.classList.contains('fmg-status-toast') && status.classList.contains('success'));
+    await flush(60);
+    assert.equal(status.style.display, 'none', '成功提示自动消失');
+
+    fmg(`showStatus('fmg-discuss-status', 'error', '出错了')`);
+    status.click();
+    assert.equal(status.style.display, 'none', '点击关闭');
+
+    fmg(`showStatus('fmg-discuss-status', 'loading', '处理中')`);
+    await flush(60);
+    assert.equal(status.style.display, 'block', '加载提示保持显示');
+    // 新提示替换旧提示时重新计时
+    fmg(`showStatus('fmg-discuss-status', 'success', '完成')`);
+    assert.equal(status.textContent, '完成');
+});
