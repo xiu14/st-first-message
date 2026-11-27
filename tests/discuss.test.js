@@ -224,6 +224,71 @@ test('事件：生成中点停止不会把输入框里的新内容发出去', as
     assert.equal(fmg("discussMessages.filter(m => m.role === 'user').length"), 1);
 });
 
+const sseEvent = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+const countStreamRenders = (fmg) => fmg('window.__streamRenders = 0; const __orig = renderStreamingText; renderStreamingText = (el, c) => { window.__streamRenders++; __orig(el, c); };');
+
+test('流式：一次读到的多个事件合并成一次渲染，停止时保存最新全文', async () => {
+    const env = await openWithCharacter();
+    const { document, fmg, window } = env;
+    let resolveRead;
+    window.__fetchHandler = async (url, options) => {
+        if (!url.endsWith('/chat/completions')) return null;
+        return {
+            ok: true,
+            body: {
+                getReader: () => ({
+                    read: () => new Promise((resolve, reject) => {
+                        resolveRead = resolve;
+                        options.signal.addEventListener('abort', () => {
+                            const error = new Error('aborted');
+                            error.name = 'AbortError';
+                            reject(error);
+                        });
+                    })
+                })
+            }
+        };
+    };
+    countStreamRenders(fmg);
+    const batch = (from) => new TextEncoder().encode(Array.from({ length: 40 }, (_, i) => sseEvent(`字${from + i}`)).join(''));
+
+    document.getElementById('fmg-discuss-input').value = '写长一点';
+    document.getElementById('fmg-discuss-send').click();
+    await flush();
+    resolveRead({ done: false, value: batch(0) });
+    await flush(100);
+    assert.equal(window.__streamRenders, 1, '40 个事件只渲染一次');
+    const bubble = document.querySelector('.fmg-chat-bubble.streaming');
+    assert.match(bubble.querySelector('.fmg-chat-text').textContent, /^字0字1[\s\S]*字39▌$/);
+
+    // 第二批刚到、还没到渲染时间就点停止：保存的应是最新全文
+    resolveRead({ done: false, value: batch(40) });
+    await flush(0);
+    document.getElementById('fmg-discuss-send').click();
+    await flush();
+    const saved = fmg("discussMessages.filter(m => m.role === 'assistant').at(-1).content");
+    assert.match(saved, /^字0[\s\S]*字79$/);
+    assert.equal(document.querySelector('.fmg-chat-bubble.streaming'), null);
+    assert.equal(fmg('isDiscussGenerating'), false);
+});
+
+test('流式：生成结束后不会再冒出流式气泡', async () => {
+    const env = await openWithCharacter();
+    const { document, fmg, window } = env;
+    const events = Array.from({ length: 30 }, (_, i) => sseEvent(`${i},`)).join('');
+    window.__fetchHandler = async (url) => (url.endsWith('/chat/completions') ? sseResponse([events, 'data: [DONE]\n\n']) : null);
+    countStreamRenders(fmg);
+
+    document.getElementById('fmg-discuss-input').value = '问';
+    document.getElementById('fmg-discuss-send').click();
+    await flush(150);
+    assert.equal(document.querySelector('.fmg-chat-bubble.streaming'), null);
+    assert.ok(window.__streamRenders <= 1);
+    const bubbles = document.querySelectorAll('.fmg-chat-bubble.assistant');
+    assert.equal(bubbles.length, 1);
+    assert.equal(bubbles[0].querySelector('.fmg-chat-text').textContent, Array.from({ length: 30 }, (_, i) => `${i},`).join(''));
+});
+
 test('事件：输入法组字时按回车不发送', async () => {
     const env = await openWithCharacter();
     streamReply(env, '好的');

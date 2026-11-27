@@ -2184,9 +2184,56 @@ ${editableEntriesText}
         return parts.join('\n\n');
     }
 
+    // 流式输出时只改一个文本节点，不重新拼接和解析整段 HTML
+    function renderStreamingText(textEl, content) {
+        let textNode = textEl.firstChild;
+        if (!textNode || textNode.nodeType !== 3 || !textEl.querySelector('.fmg-cursor')) {
+            textEl.textContent = '';
+            textNode = document.createTextNode('');
+            const cursor = document.createElement('span');
+            cursor.className = 'fmg-cursor';
+            cursor.textContent = '▌';
+            textEl.append(textNode, cursor);
+        }
+        if (textNode.data !== content) textNode.data = content;
+    }
+
+    /**
+     * 流式内容合并渲染：一次网络读取可能带来几十个事件，逐个重绘长回复会把手机主线程卡住。
+     * 这里只记下最新全文，最多每 STREAM_RENDER_INTERVAL 毫秒画一次；第一段立即画。
+     */
+    const STREAM_RENDER_INTERVAL = 60;
+    let pendingStreamContent = null;
+    let streamRenderTimer = null;
+    let lastStreamRenderAt = 0;
+
+    function scheduleStreamingRender(content) {
+        pendingStreamContent = content;
+        if (streamRenderTimer) return;
+        const wait = Math.max(0, STREAM_RENDER_INTERVAL - (Date.now() - lastStreamRenderAt));
+        streamRenderTimer = setTimeout(flushStreamingRender, wait);
+    }
+
+    // 把还没画出来的流式内容立即画上（停止生成前要先补上，保存的才是最新全文）
+    function flushStreamingRender() {
+        const content = pendingStreamContent;
+        cancelStreamingRender();
+        if (content === null) return;
+        lastStreamRenderAt = Date.now();
+        appendChatMessage('assistant', content, true);
+    }
+
+    function cancelStreamingRender() {
+        clearTimeout(streamRenderTimer);
+        streamRenderTimer = null;
+        pendingStreamContent = null;
+    }
+
     function appendChatMessage(role, content, isStreaming = false, messageId = '') {
         const container = document.getElementById('fmg-chat-messages');
         if (!container) return;
+        // 最终内容到了，丢掉还没画的流式内容，免得之后又冒出一个流式气泡
+        if (!isStreaming) cancelStreamingRender();
         const shouldAutoScroll = role === 'user' || discussAutoScroll || isDiscussNearBottom(container);
 
         // 首次发消息时移除欢迎提示
@@ -2215,7 +2262,7 @@ ${editableEntriesText}
 
         const textEl = bubble.querySelector('.fmg-chat-text');
         if (isStreaming) {
-            textEl.innerHTML = escapeHtml(content) + '<span class="fmg-cursor">▌</span>';
+            renderStreamingText(textEl, content);
         } else {
             bubble.dataset.messageId = messageId || '';
             if (role === 'assistant') {
@@ -3873,7 +3920,7 @@ ${editableEntriesText}
         try {
             const { controller, promise } = startChatStream([...discussMessages], {
                 onChunk: (content) => {
-                    appendChatMessage('assistant', content, true);
+                    scheduleStreamingRender(content);
                 },
                 onDone: (finalContent) => {
                     const assistantMessage = createChatMessage('assistant', finalContent);
@@ -3903,6 +3950,7 @@ ${editableEntriesText}
             discussAbortController.abort();
             discussAbortController = null;
         }
+        flushStreamingRender();
         // 移除流式标记，保留已生成内容
         const streaming = document.querySelector('.fmg-chat-bubble.streaming');
         if (streaming) {
